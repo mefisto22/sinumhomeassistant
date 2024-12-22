@@ -1,0 +1,9 @@
+{
+    "domain": "sinum_thermostat",
+    "name": "SINUM Thermostat Integration",
+    "version": "1.0.0",
+    "documentation": "https://github.com/your-repo/sinum_thermostat",
+    "requirements": [],
+    "codeowners": ["@your_username"],
+    "iot_class": "cloud_polling"
+}
