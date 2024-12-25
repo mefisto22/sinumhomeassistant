@@ -1,3 +1,3 @@
-DOMAIN = "sinum_thermostat"
+DOMAIN = "sinum"
 CONF_IP = "ip"
 CONF_TOKEN = "token"
