@@ -22,10 +22,6 @@ Az egyes entitások frissítési ideje az integrációhoz tartozó `.py` fájlok
 | Bináris bemenetek         | WTP és SBUS                  |
 | Akkumulátor szenzorok     | WTP és SBUS                  |
 
-## Korlátozások
-
-- Az integráció még alfa fázisban van, ezért előfordulhatnak hibák.
-
 
 ---
 
@@ -54,8 +50,5 @@ The update interval for each entity domain can be modified in the corresponding 
 | Binary inputs            | WTP and SBUS                 |
 | Battery sensors          | WTP and SBUS                 |
 
-## Limitations
-
-- The integration is still in the alpha phase, so bugs may occur.
 
 ---
