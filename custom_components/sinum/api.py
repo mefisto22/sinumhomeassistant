@@ -1,5 +1,6 @@
 import aiohttp
 import logging
+import json
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,9 +29,39 @@ class SinumAPI:
             try:
                 async with session.get(url, headers=self.headers) as resp:
                     resp.raise_for_status()
-                    raw_data = await resp.json()
-                    if isinstance(raw_data, dict) and "data" in raw_data:
-                        return raw_data["data"]
+
+                    # Mindig nyers bájtokat olvasunk, majd több kódolással próbálunk JSON-t pars-olni.
+                    raw = await resp.read()
+                    raw_data = None
+                    for enc in ("utf-8", "utf-8-sig", "latin-1", "cp1250", "cp1252"):
+                        try:
+                            raw_text = raw.decode(enc)
+                            raw_data = json.loads(raw_text)
+                            break
+                        except Exception:
+                            continue
+
+                    if raw_data is None:
+                        _LOGGER.error(
+                            "Virtual devices: JSON dekódolás sikertelen "
+                            "(content_type=%s, charset=%s, size=%dB, first200=%r)",
+                            getattr(resp, "content_type", None),
+                            getattr(resp, "charset", None),
+                            len(raw),
+                            raw[:200],
+                        )
+                        return []
+
+                    # Kimenet normalizálás (dict-ben 'data' lista, vagy top-level lista)
+                    if isinstance(raw_data, dict):
+                        if isinstance(raw_data.get("data"), list):
+                            return raw_data["data"]
+                        for k in ("items", "results", "devices"):
+                            if isinstance(raw_data.get(k), list):
+                                return raw_data[k]
+                        return []
+                    elif isinstance(raw_data, list):
+                        return raw_data
                     return []
             except Exception as e:
                 _LOGGER.error("Error fetching virtual devices: %s", e)
