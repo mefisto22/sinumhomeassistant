@@ -12,11 +12,12 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.components.light import (
     LightEntity,
+    ColorMode,
     ATTR_BRIGHTNESS,
     ATTR_HS_COLOR,
-    ATTR_COLOR_TEMP,
-    COLOR_MODE_HS,
-    COLOR_MODE_COLOR_TEMP,
+    ATTR_COLOR_TEMP_KELVIN,
+    DEFAULT_MIN_KELVIN,
+    DEFAULT_MAX_KELVIN,
     LightEntityFeature,
 )
 
@@ -27,6 +28,7 @@ from .api import SinumAPI
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -127,11 +129,14 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
         # LED szalag típusa
         strip_type = device.get("led_strip_type", "rgb")  # "rgb", "rgbw", "rgbww"
 
-        # Ha "rgb" => HS, ha "rgbw"/"rgbww" => HS + color_temp
+        # Ha "rgb" => HS, ha "rgbw"/"rgbww" => HS + COLOR_TEMP
         if strip_type == "rgb":
-            self._attr_supported_color_modes = {COLOR_MODE_HS}
+            self._attr_supported_color_modes = {ColorMode.HS}
         else:
-            self._attr_supported_color_modes = {COLOR_MODE_HS, COLOR_MODE_COLOR_TEMP}
+            self._attr_supported_color_modes = {ColorMode.HS, ColorMode.COLOR_TEMP}
+            # Kelvin alapú default tartomány (HA default értékek)
+            self._attr_min_color_temp_kelvin = DEFAULT_MIN_KELVIN
+            self._attr_max_color_temp_kelvin = DEFAULT_MAX_KELVIN
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -187,17 +192,17 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
             r = int(hex_color[1:3], 16)
             g = int(hex_color[3:5], 16)
             b = int(hex_color[5:7], 16)
-            h, s, _ = colorsys.rgb_to_hsv(r/255, g/255, b/255)
-            return (h*360, s*100)
+            h, s, _ = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            return (h * 360, s * 100)
         return None
 
     @property
-    def color_temp(self) -> int | None:
+    def color_temp_kelvin(self) -> int | None:
         """
-        Kelvin => HA mired.
-        Csak, ha a color_temp mód támogatott.
+        Kelvin alapú színhőmérséklet (új HA API).
+        Csak, ha a COLOR_TEMP mód támogatott.
         """
-        if COLOR_MODE_COLOR_TEMP not in self._attr_supported_color_modes:
+        if not self._attr_supported_color_modes or ColorMode.COLOR_TEMP not in self._attr_supported_color_modes:
             return None
         dev = self._find_device_in_coordinator()
         if not dev:
@@ -205,21 +210,25 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
         kelvin = dev.get("white_temperature")
         if not kelvin:
             return None
-        return int(1_000_000 / kelvin)
+        return int(kelvin)
 
     @property
-    def color_mode(self) -> str:
+    def color_mode(self) -> ColorMode:
         """
-        dev["color_mode"] == "temperature" => COLOR_MODE_COLOR_TEMP,
-        egyébként => COLOR_MODE_HS
+        dev["color_mode"] == "temperature" => ColorMode.COLOR_TEMP,
+        egyébként => ColorMode.HS
         """
         dev = self._find_device_in_coordinator()
         if not dev:
-            return COLOR_MODE_HS
+            return ColorMode.HS
         mode_in_api = dev.get("color_mode", "rgb")
-        if (mode_in_api == "temperature") and (COLOR_MODE_COLOR_TEMP in self._attr_supported_color_modes):
-            return COLOR_MODE_COLOR_TEMP
-        return COLOR_MODE_HS
+        if (
+            mode_in_api == "temperature"
+            and self._attr_supported_color_modes
+            and ColorMode.COLOR_TEMP in self._attr_supported_color_modes
+        ):
+            return ColorMode.COLOR_TEMP
+        return ColorMode.HS
 
     async def async_turn_on(self, **kwargs) -> None:
         """Bekapcsolás + paraméterek."""
@@ -238,10 +247,13 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
             api_bri = round(new_ha_bri * 100 / 255)
             await self._send_command("set_brightness", [api_bri])
 
-        # 3) color_temp
-        if ATTR_COLOR_TEMP in kwargs and COLOR_MODE_COLOR_TEMP in self._attr_supported_color_modes:
-            mired = kwargs[ATTR_COLOR_TEMP]
-            kelvin = round(1_000_000 / mired)
+        # 3) color_temp (Kelvin alapú új API)
+        if (
+            ATTR_COLOR_TEMP_KELVIN in kwargs
+            and self._attr_supported_color_modes
+            and ColorMode.COLOR_TEMP in self._attr_supported_color_modes
+        ):
+            kelvin = kwargs[ATTR_COLOR_TEMP_KELVIN]
             await self._send_command("set_temperature", [kelvin])
 
         # 4) hs_color
@@ -250,9 +262,9 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
             h = hh / 360.0
             s = ss / 100.0
             (r, g, b) = colorsys.hsv_to_rgb(h, s, brightness_factor)
-            rr = round(r*255)
-            gg = round(g*255)
-            bb = round(b*255)
+            rr = round(r * 255)
+            gg = round(g * 255)
+            bb = round(b * 255)
             hex_str = f"#{rr:02x}{gg:02x}{bb:02x}"
 
             await self._send_command("set_color", [hex_str])
@@ -290,7 +302,13 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
         elif command == "set_temperature":
             body = {"set_temperature": payload_data}
 
-        _LOGGER.debug("Sending command=%s body=%s to device=%s/%s", command, body, self._device_class, self._device_id)
+        _LOGGER.debug(
+            "Sending command=%s body=%s to device=%s/%s",
+            command,
+            body,
+            self._device_class,
+            self._device_id,
+        )
 
         async with aiohttp.ClientSession() as session:
             try:
