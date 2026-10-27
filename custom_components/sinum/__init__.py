@@ -102,16 +102,17 @@ def _async_migrate_legacy_registry(
 ) -> None:
     """Régi unique_id-k és a közös eszköz átírása; az entity_id-k és az előzmények megmaradnak."""
     dev_reg = dr.async_get(hass)
-    legacy_device = dev_reg.async_get_device(identifiers={_LEGACY_DEVICE_IDENTIFIER})
-    if (
-        legacy_device is not None
-        and entry.entry_id in legacy_device.config_entries
-        and dev_reg.async_get_device(identifiers={(DOMAIN, entry.entry_id)}) is None
-    ):
-        dev_reg.async_update_device(
-            legacy_device.id, new_identifiers={(DOMAIN, entry.entry_id)}
+    new_identifier = (DOMAIN, entry.entry_id)
+    # Csak a bejegyzés saját eszközeit nézzük: az azonosító szerinti keresés
+    # (async_get_device) a HA 2026.10-től elavult.
+    devices = dr.async_entries_for_config_entry(dev_reg, entry.entry_id)
+    if not any(new_identifier in device.identifiers for device in devices):
+        legacy_device = next(
+            (d for d in devices if _LEGACY_DEVICE_IDENTIFIER in d.identifiers), None
         )
-        _LOGGER.info("Migrated legacy SINUM device to config entry %s", entry.entry_id)
+        if legacy_device is not None:
+            dev_reg.async_update_device(legacy_device.id, new_identifiers={new_identifier})
+            _LOGGER.info("Migrated legacy SINUM device to config entry %s", entry.entry_id)
 
     # Az osztály nélküli régi azonosítóknál (binary_sensor, number) az sbus eszköz
     # nyert, mert a régi kód sbus+wtp sorrendben hozta létre az entitásokat.
