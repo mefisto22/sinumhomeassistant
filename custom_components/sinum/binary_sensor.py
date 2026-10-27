@@ -14,6 +14,10 @@ BINARY_TYPES = {
 }
 
 
+# A frissítést a koordinátor végzi
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:

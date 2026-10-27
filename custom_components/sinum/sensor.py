@@ -20,6 +20,10 @@ FOOT_CANDLE_PER_LUX = 0.09290304
 THERMOSTAT_MODES = ["off", "heating", "cooling"]
 
 
+# A frissítést a koordinátor végzi
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:

@@ -10,6 +10,10 @@ from .coordinator import SinumConfigEntry
 from .entity import SinumEntity, async_add_device_entities
 
 
+# Egyszerre egy parancs platformonként, hogy a vezérlőt ne terheljük túl
+PARALLEL_UPDATES = 1
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:

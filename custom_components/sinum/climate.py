@@ -10,9 +10,10 @@ from homeassistant.components.climate import (
 )
 from homeassistant.const import ATTR_TEMPERATURE
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import DOMAIN
 from .coordinator import SinumConfigEntry
 from .entity import (
     HUMIDITY_RANGE,
@@ -30,6 +31,10 @@ HVAC_TO_SINUM = {HVACMode.HEAT: "heating", HVACMode.COOL: "cooling", HVACMode.OF
 PRESET_SCHEDULE = "schedule"
 PRESET_CONSTANT = "constant"
 PRESET_TIME_LIMITED = "time_limited"
+
+
+# Egyszerre egy parancs platformonként, hogy a vezérlőt ne terheljük túl
+PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(
@@ -139,10 +144,16 @@ class SinumThermostatClimate(SinumEntity, ClimateEntity):
             dev = self.device
             target = dev.get("target_temperature") if dev else None
             if target is None:
-                raise HomeAssistantError("SINUM: the thermostat has no target temperature")
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN, translation_key="no_target_temperature"
+                )
             await self._async_command("enable_constant_mode", target)
         else:
-            raise HomeAssistantError(f"SINUM: preset '{preset_mode}' cannot be activated")
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="preset_not_supported",
+                translation_placeholders={"preset": preset_mode},
+            )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         ensure_mode_mutable(self.device)

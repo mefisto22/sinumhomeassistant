@@ -5,13 +5,13 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from homeassistant.core import callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import SinumError
+from .api import SinumAuthError, SinumConnectionError, SinumError
 from .const import DOMAIN
 from .coordinator import SinumConfigEntry, SinumCoordinator
 
@@ -96,7 +96,7 @@ def has_label(device: dict[str, Any] | None, label: str) -> bool:
 def ensure_mode_mutable(device: dict[str, Any] | None) -> None:
     """A termosztát üzemmódja zárolható (mode_mutable = false)."""
     if device and device.get("mode_mutable") is False:
-        raise HomeAssistantError("SINUM: the thermostat mode is locked on the controller")
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="mode_locked")
 
 
 @callback
@@ -150,7 +150,17 @@ class SinumEntity(CoordinatorEntity[SinumCoordinator]):
         try:
             await call
         except SinumError as err:
-            raise HomeAssistantError(f"SINUM: {err}") from err
+            if isinstance(err, SinumConnectionError):
+                key = "cannot_connect"
+            elif isinstance(err, SinumAuthError):
+                key = "invalid_auth"
+            else:
+                key = "command_failed"
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key=key,
+                translation_placeholders={"error": str(err)},
+            ) from err
         if refresh:
             await self.coordinator.async_request_refresh()
 

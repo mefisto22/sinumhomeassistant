@@ -83,5 +83,25 @@
         "name": "Célhőmérséklet"
       }
     }
+  },
+  "exceptions": {
+    "mode_locked": {
+      "message": "A termosztát üzemmódja zárolva van a SINUM vezérlőn"
+    },
+    "no_target_temperature": {
+      "message": "A termosztátnak nincs célhőmérséklete"
+    },
+    "preset_not_supported": {
+      "message": "A(z) {preset} előbeállítás Home Assistantból nem kapcsolható be"
+    },
+    "cannot_connect": {
+      "message": "A SINUM vezérlő nem érhető el: {error}"
+    },
+    "invalid_auth": {
+      "message": "A SINUM vezérlő elutasította az API tokent: {error}"
+    },
+    "command_failed": {
+      "message": "A SINUM vezérlő elutasította a parancsot: {error}"
+    }
   }
 }

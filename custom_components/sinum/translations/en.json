@@ -83,5 +83,25 @@
         "name": "Target temperature"
       }
     }
+  },
+  "exceptions": {
+    "mode_locked": {
+      "message": "The thermostat mode is locked on the SINUM controller"
+    },
+    "no_target_temperature": {
+      "message": "The thermostat has no target temperature"
+    },
+    "preset_not_supported": {
+      "message": "The {preset} preset cannot be activated from Home Assistant"
+    },
+    "cannot_connect": {
+      "message": "Cannot reach the SINUM controller: {error}"
+    },
+    "invalid_auth": {
+      "message": "The SINUM controller rejected the API token: {error}"
+    },
+    "command_failed": {
+      "message": "The SINUM controller rejected the command: {error}"
+    }
   }
 }

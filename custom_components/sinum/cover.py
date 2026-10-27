@@ -22,6 +22,10 @@ COVERING_TYPE_TO_DEVICE_CLASS = {
 }
 
 
+# Egyszerre egy parancs platformonként, hogy a vezérlőt ne terheljük túl
+PARALLEL_UPDATES = 1
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
