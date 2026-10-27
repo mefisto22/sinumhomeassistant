@@ -40,5 +40,20 @@
       "reauth_successful": "Az újrahitelesítés sikerült.",
       "reconfigure_successful": "Az újrakonfigurálás sikerült."
     }
+  },
+  "entity": {
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "schedule": "Ütemezés",
+              "constant": "Állandó",
+              "time_limited": "Időkorlátos"
+            }
+          }
+        }
+      }
+    }
   }
 }

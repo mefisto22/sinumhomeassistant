@@ -5,7 +5,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import SinumConfigEntry
-from .entity import SinumEntity, slug
+from .entity import SinumEntity, ensure_mode_mutable, slug
 
 
 async def async_setup_entry(
@@ -34,4 +34,5 @@ class SinumThermostatModeSelect(SinumEntity, SelectEntity):
         return dev.get("mode") if dev else None
 
     async def async_select_option(self, option: str) -> None:
+        ensure_mode_mutable(self.device)
         await self._async_patch(mode=option)

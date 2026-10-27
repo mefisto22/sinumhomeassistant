@@ -40,5 +40,20 @@
       "reauth_successful": "Re-authentication was successful.",
       "reconfigure_successful": "Reconfiguration was successful."
     }
+  },
+  "entity": {
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "schedule": "Schedule",
+              "constant": "Constant",
+              "time_limited": "Time limited"
+            }
+          }
+        }
+      }
+    }
   }
 }

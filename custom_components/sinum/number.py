@@ -56,7 +56,7 @@ class SinumThermostatSetpointNumber(SinumEntity, NumberEntity):
         return self._tenths("target_temperature")
 
     async def async_set_native_value(self, value: float) -> None:
-        await self._async_patch(target_temperature=int(value * 10))
+        await self._async_patch(target_temperature=round(value * 10))
 
 
 class SinumAnalogOutputNumber(SinumEntity, NumberEntity):

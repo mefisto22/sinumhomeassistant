@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import SinumConfigEntry, SinumCoordinator
-from .entity import SinumEntity, slug
+from .entity import HUMIDITY_RANGE, TEMPERATURE_RANGE, SinumEntity, measurement, slug
 
 
 async def async_setup_entry(
@@ -27,8 +27,15 @@ async def async_setup_entry(
     ):
         base = slug(dev.get("name") or f"thermostat{count}")
         entities += [
-            SinumSensor(coordinator, dev, "temp", f"{base}_temp", "temperature", 10, TEMPERATURE),
-            SinumSensor(coordinator, dev, "humidity", f"{base}_humidity", "humidity", 10, HUMIDITY),
+            # 0: nincs hozzárendelt érzékelő
+            SinumSensor(
+                coordinator, dev, "temp", f"{base}_temp", "temperature", 10, TEMPERATURE,
+                TEMPERATURE_RANGE, zero_is_none=True,
+            ),
+            SinumSensor(
+                coordinator, dev, "humidity", f"{base}_humidity", "humidity", 10, HUMIDITY,
+                HUMIDITY_RANGE, zero_is_none=True,
+            ),
             SinumSensor(coordinator, dev, "mode", f"{base}_mode", "mode", None, None),
             SinumSensor(
                 coordinator, dev, "tempsetpoint", f"{base}_tempsetpoint", "target_temperature", 10, TEMPERATURE
@@ -41,11 +48,16 @@ async def async_setup_entry(
         dev_type = dev.get("type")
         if dev_type == "temperature_sensor":
             entities.append(
-                SinumSensor(coordinator, dev, "temperature", f"{base}_temperature", "temperature", 10, TEMPERATURE)
+                SinumSensor(
+                    coordinator, dev, "temperature", f"{base}_temperature", "temperature", 10, TEMPERATURE,
+                    TEMPERATURE_RANGE,
+                )
             )
         elif dev_type == "humidity_sensor":
             entities.append(
-                SinumSensor(coordinator, dev, "humidity", f"{base}_humidity", "humidity", 10, HUMIDITY)
+                SinumSensor(
+                    coordinator, dev, "humidity", f"{base}_humidity", "humidity", 10, HUMIDITY, HUMIDITY_RANGE
+                )
             )
         elif dev_type == "light_sensor":
             entities.append(
@@ -74,7 +86,10 @@ BATTERY = (SensorDeviceClass.BATTERY, PERCENTAGE, SensorStateClass.MEASUREMENT)
 
 
 class SinumSensor(SinumEntity, SensorEntity):
-    """Egy eszközmező értéke, opcionális osztóval (pl. tizedfok -> fok)."""
+    """Egy eszközmező értéke, opcionális osztóval (pl. tizedfok -> fok).
+
+    Megadott érvényes tartománynál a 'nincs mérés' jelzésekből ismeretlen állapot lesz.
+    """
 
     def __init__(
         self,
@@ -85,11 +100,16 @@ class SinumSensor(SinumEntity, SensorEntity):
         field: str,
         divisor: int | None,
         kind: tuple[SensorDeviceClass, str, SensorStateClass] | None,
+        valid_range: tuple[int, int] | None = None,
+        *,
+        zero_is_none: bool = False,
     ) -> None:
         super().__init__(coordinator, device, key)
         self._attr_name = name
         self._field = field
         self._divisor = divisor
+        self._valid_range = valid_range
+        self._zero_is_none = zero_is_none
         if kind is not None:
             (
                 self._attr_device_class,
@@ -101,6 +121,8 @@ class SinumSensor(SinumEntity, SensorEntity):
     def native_value(self) -> Any:
         dev = self.device
         raw = dev.get(self._field) if dev else None
+        if self._valid_range is not None or self._zero_is_none:
+            return measurement(raw, self._divisor or 1, self._valid_range, zero_is_none=self._zero_is_none)
         if raw is None or self._divisor is None:
             return raw
         return raw / self._divisor

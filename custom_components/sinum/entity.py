@@ -32,6 +32,43 @@ def slug(name: str) -> str:
     return name.lower().replace(" ", "_")
 
 
+# Az API érvényes nyers tartományai (tizedfok, tized-rH%); ezen kívül eső érték
+# (pl. -32768) azt jelzi, hogy nincs mérés.
+TEMPERATURE_RANGE = (-400, 1000)
+HUMIDITY_RANGE = (0, 1000)
+
+
+def measurement(
+    raw: Any,
+    divisor: float = 1,
+    valid_range: tuple[int, int] | None = None,
+    *,
+    zero_is_none: bool = False,
+) -> float | None:
+    """Mért érték skálázva; a 'nincs érzékelő' jelzésekből None lesz.
+
+    A termosztát 0-t ad, ha nincs hozzárendelt érzékelő, a szenzorok pedig
+    tartományon kívüli értéket, ha nincs szonda vagy nincs mérés.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    if zero_is_none and raw == 0:
+        return None
+    if valid_range is not None and not valid_range[0] <= raw <= valid_range[1]:
+        return None
+    return raw / divisor
+
+
+def has_label(device: dict[str, Any] | None, label: str) -> bool:
+    return bool(device) and label in (device.get("labels") or [])
+
+
+def ensure_mode_mutable(device: dict[str, Any] | None) -> None:
+    """A termosztát üzemmódja zárolható (mode_mutable = false)."""
+    if device and device.get("mode_mutable") is False:
+        raise HomeAssistantError("SINUM: the thermostat mode is locked on the controller")
+
+
 class SinumEntity(CoordinatorEntity[SinumCoordinator]):
     """Egy SINUM eszköz (class + id) egy jellemzője."""
 
