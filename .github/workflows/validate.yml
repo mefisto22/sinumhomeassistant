@@ -21,9 +21,8 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # brands: nincs bejegyzés a home-assistant/brands repóban;
-          # description, topics: a GitHub repó metaadatai még nincsenek kitöltve
-          ignore: brands description topics
+          # nincs bejegyzés a home-assistant/brands repóban
+          ignore: brands
 
   pytest:
     runs-on: ubuntu-latest
