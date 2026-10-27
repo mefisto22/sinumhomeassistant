@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SINUM controller",
+        "description": "Connect to a SINUM central unit over its local API.",
+        "data": {
+          "ip": "Host",
+          "token": "API token"
+        },
+        "data_description": {
+          "ip": "IP address or hostname of the SINUM central unit, optionally with port (e.g. 192.168.1.50 or sinum.local).",
+          "token": "API key created in the SINUM web app."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate SINUM",
+        "description": "The SINUM controller at {host} rejected the API token. Enter a new one.",
+        "data": {
+          "token": "API token"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure SINUM",
+        "data": {
+          "ip": "Host",
+          "token": "API token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the controller.",
+      "invalid_auth": "The controller rejected the API token.",
+      "invalid_host": "Invalid host.",
+      "invalid_response": "The device did not respond like a SINUM controller.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This controller is already configured.",
+      "reauth_successful": "Re-authentication was successful.",
+      "reconfigure_successful": "Reconfiguration was successful."
+    }
+  }
+}

@@ -1,272 +1,112 @@
-import logging
-from datetime import timedelta
-from homeassistant.config_entries import ConfigEntry
+from __future__ import annotations
+
+from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
+from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator,
-    CoordinatorEntity,
-)
-from homeassistant.components.number import NumberEntity, NumberMode, NumberDeviceClass
-from homeassistant.helpers.device_registry import DeviceInfo
 
-from .api import SinumAPI
-from .const import DOMAIN
+from .coordinator import SinumConfigEntry
+from .entity import SinumEntity, slug
 
-_LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    ip = config_entry.data["ip"]
-    token = config_entry.data["token"]
-    api = SinumAPI(ip, token)
-
-    update_interval = timedelta(seconds=1) 
-
-    # Coordinators létrehozása
-    thermostat_coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name="SINUM Thermostat Number",
-        update_method=api.get_virtual_devices,
-        update_interval=update_interval,
-    )
-
-    sbus_wtp_coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name="SINUM SBUS/WTP Coordinator",
-        update_method=_fetch_sbus_wtp_devices(api),
-        update_interval=update_interval,
-    )
-
-    # Első frissítések
-    await thermostat_coordinator.async_config_entry_first_refresh()
-    await sbus_wtp_coordinator.async_config_entry_first_refresh()
-
-    devices_thermostat = thermostat_coordinator.data or []
-    devices_sbus_wtp = sbus_wtp_coordinator.data or []
-
-    entities = []
-
-    # Thermostat entitások hozzáadása
-    for dev in devices_thermostat:
-        if dev.get("type") == "thermostat":
-            name_in_api = dev.get("name", "Thermostat")
-            base_name = name_in_api.lower().replace(" ", "_")
-
-            entities.append(
-                SinumThermostatSetpointNumber(thermostat_coordinator, dev, base_name, api)
-            )
-
-    # Analóg kimenet és PWM entitások hozzáadása
-    for dev in devices_sbus_wtp:
-        device_type = dev.get("type")
-        name_in_api = dev.get("name", "unknown_device")
-        base_name = name_in_api.lower().replace(" ", "_")
-
-        if device_type == "analog_output":
-            entities.append(
-                SinumAnalogOutputNumber(sbus_wtp_coordinator, dev, base_name, api)
-            )
-        elif device_type == "pulse_width_modulation":
-            entities.append(
-                SinumPWMNumber(sbus_wtp_coordinator, dev, base_name, api)
-            )
-
+    coordinator = entry.runtime_data
+    entities: list[NumberEntity] = [
+        SinumThermostatSetpointNumber(coordinator, dev)
+        for dev in coordinator.devices("virtual")
+        if dev.get("type") == "thermostat"
+    ]
+    for dev in coordinator.devices():
+        if dev["class"] not in ("sbus", "wtp"):
+            continue
+        if dev.get("type") == "analog_output":
+            entities.append(SinumAnalogOutputNumber(coordinator, dev))
+        elif dev.get("type") == "pulse_width_modulation":
+            entities.append(SinumPWMNumber(coordinator, dev))
     async_add_entities(entities)
 
-def _fetch_sbus_wtp_devices(api: SinumAPI):
-    async def _async_fetch_sbus_wtp():
-        sbus_list = await api.get_sbus_devices()
-        wtp_list = await api.get_wtp_devices()
-        return sbus_list + wtp_list
 
-    return _async_fetch_sbus_wtp
-
-# Definiáljuk a közös DeviceInfo-t
-DEVICE_INFO = DeviceInfo(
-    identifiers={(DOMAIN, "all_in_one")},
-    name="SINUM All-in-One",
-    manufacturer="SINUM",
-    model="All-in-One Integration",
-)
-
-class SinumThermostatSetpointNumber(CoordinatorEntity, NumberEntity):
+class SinumThermostatSetpointNumber(SinumEntity, NumberEntity):
     _attr_mode = NumberMode.SLIDER
     _attr_device_class = NumberDeviceClass.TEMPERATURE
-    _attr_native_unit_of_measurement = "°C"
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_native_step = 0.1
 
-    def __init__(self, coordinator, device, base_name, api: SinumAPI):
-        super().__init__(coordinator)
-        self._device_id = device.get("id")
-        self._api = api
-        self._attr_name = f"{base_name}_tempset"
-        self._attr_unique_id = f"{DOMAIN}_all_in_one_{self._device_id}_temp_set"
+    def __init__(self, coordinator, device) -> None:
+        super().__init__(coordinator, device, "temp_set")
+        self._attr_name = f"{slug(device.get('name', 'Thermostat'))}_tempset"
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DEVICE_INFO
+    def _tenths(self, field: str, default: int | None = None) -> float | None:
+        dev = self.device
+        raw = dev.get(field, default) if dev else default
+        return None if raw is None else raw / 10.0
 
     @property
     def native_min_value(self) -> float:
-        dev = self._find_device_in_coordinator()
-        if not dev:
-            return 5.0
-        raw_lower = dev.get("target_temperature_minimum", 50)
-        return raw_lower / 10.0
+        return self._tenths("target_temperature_minimum", 50)
 
     @property
     def native_max_value(self) -> float:
-        dev = self._find_device_in_coordinator()
-        if not dev:
-            return 35.0
-        raw_upper = dev.get("target_temperature_maximum", 350)
-        return raw_upper / 10.0
-
-    @property
-    def native_step(self) -> float:
-        return 0.1
+        return self._tenths("target_temperature_maximum", 350)
 
     @property
     def native_value(self) -> float | None:
-        dev = self._find_device_in_coordinator()
-        if not dev:
-            return None
-        raw_target = dev.get("target_temperature")
-        if raw_target is None:
-            return None
-        return raw_target / 10.0
+        return self._tenths("target_temperature")
 
     async def async_set_native_value(self, value: float) -> None:
-        new_target = int(value * 10)
-        result = await self._api.set_thermostat_target_temperature(self._device_id, new_target)
-        if result:
-            await self.coordinator.async_request_refresh()
+        await self._async_patch(target_temperature=int(value * 10))
 
-    def _find_device_in_coordinator(self):
-        data = self.coordinator.data
-        if not data:
-            return None
-        for dev in data:
-            if dev.get("id") == self._device_id:
-                return dev
-        return None
 
-class SinumAnalogOutputNumber(CoordinatorEntity, NumberEntity):
+class SinumAnalogOutputNumber(SinumEntity, NumberEntity):
+    """Analóg kimenet; az API ezredekben (mV / µA) adja az értéket."""
+
     _attr_mode = NumberMode.SLIDER
-    _attr_native_unit_of_measurement = "mA"  # Alapértelmezett egység
+    _attr_native_step = 0.1
 
-    def __init__(self, coordinator, device, base_name, api: SinumAPI):
-        super().__init__(coordinator)
-        self._device_id = device.get("id")
-        self._api = api
-        self._attr_name = f"{base_name}_analog_output"
-        self._attr_unique_id = f"{DOMAIN}_all_in_one_{self._device_id}_analog_output"
-        self._unit = device.get("unit", "V")
-        self._attr_native_unit_of_measurement = "mA" if self._unit.lower() == "ua" else "V"
+    def __init__(self, coordinator, device) -> None:
+        super().__init__(coordinator, device, "analog_output")
+        self._attr_name = f"{slug(device.get('name', 'unknown_device'))}_analog_output"
+        unit = device.get("unit", "V")
+        self._attr_native_unit_of_measurement = "mA" if unit.lower() == "ua" else "V"
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DEVICE_INFO
+    def _thousandths(self, field: str, default: int | None = None) -> float | None:
+        dev = self.device
+        raw = dev.get(field, default) if dev else default
+        return None if raw is None else raw / 1000.0
 
     @property
     def native_min_value(self) -> float:
-        dev = self._find_device_in_coordinator()
-        if not dev:
-            return 0.0
-        raw_min = dev.get("value_minimum", 0)
-        return raw_min / 1000.0
+        return self._thousandths("value_minimum", 0)
 
     @property
     def native_max_value(self) -> float:
-        dev = self._find_device_in_coordinator()
-        if not dev:
-            return 10.0
-        raw_max = dev.get("value_maximum", 10000)
-        return raw_max / 1000.0
-
-    @property
-    def native_step(self) -> float:
-        return 0.1
+        return self._thousandths("value_maximum", 10000)
 
     @property
     def native_value(self) -> float | None:
-        dev = self._find_device_in_coordinator()
-        if not dev:
-            return None
-        raw_value = dev.get("value")
-        if raw_value is None:
-            return None
-        return raw_value / 1000.0
+        return self._thousandths("value")
 
     async def async_set_native_value(self, value: float) -> None:
-        set_value = int(value * 1000)
-        result = await self._api.set_analog_output_value(self._device_id, set_value)
-        if result:
-            await self.coordinator.async_request_refresh()
+        await self._async_command("set_value", int(value * 1000))
 
-    def _find_device_in_coordinator(self):
-        data = self.coordinator.data
-        if not data:
-            return None
-        for dev in data:
-            if dev.get("id") == self._device_id:
-                return dev
-        return None
 
-class SinumPWMNumber(CoordinatorEntity, NumberEntity):
+class SinumPWMNumber(SinumEntity, NumberEntity):
     _attr_mode = NumberMode.SLIDER
-    _attr_native_unit_of_measurement = "%"  # Módosítva "%"-re
+    _attr_native_unit_of_measurement = "%"
+    _attr_native_min_value = 0.0
+    _attr_native_max_value = 100.0
+    _attr_native_step = 1.0
 
-    def __init__(self, coordinator, device, base_name, api: SinumAPI):
-        super().__init__(coordinator)
-        self._device_id = device.get("id")
-        self._device_class = device.get("class")  # 'sbus' vagy 'wtp'
-        self._api = api
-        self._attr_name = f"{base_name}_pwm"
-        self._attr_unique_id = f"{DOMAIN}_all_in_one_{self._device_id}_pwm"
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DEVICE_INFO
-
-    @property
-    def native_min_value(self) -> float:
-        return 0.0
-
-    @property
-    def native_max_value(self) -> float:
-        return 100.0
-
-    @property
-    def native_step(self) -> float:
-        return 1.0  # Lépésköz 1%-onként
+    def __init__(self, coordinator, device) -> None:
+        super().__init__(coordinator, device, "pwm")
+        self._attr_name = f"{slug(device.get('name', 'unknown_device'))}_pwm"
 
     @property
     def native_value(self) -> float | None:
-        dev = self._find_device_in_coordinator()
-        if not dev:
-            return None
-        duty_cycle = dev.get("duty_cycle")
-        if duty_cycle is None:
-            return None
-        return duty_cycle  # Direct 0-100%
+        dev = self.device
+        return dev.get("duty_cycle") if dev else None
 
     async def async_set_native_value(self, value: float) -> None:
-        set_duty_cycle = int(value)  # Például 75%
-        result = await self._api.set_pwm_duty_cycle(self._device_class, self._device_id, set_duty_cycle)
-        if result:
-            await self.coordinator.async_request_refresh()
-
-    def _find_device_in_coordinator(self):
-        data = self.coordinator.data
-        if not data:
-            return None
-        for dev in data:
-            if dev.get("id") == self._device_id:
-                return dev
-        return None
+        await self._async_command("set_duty_cycle", int(value))

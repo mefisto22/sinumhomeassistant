@@ -1,10 +1,12 @@
 {
-    "domain": "sinum",               
-    "name": "SINUM Integration",
-    "version": "0.0.6",
-    "config_flow": true,
-    "documentation": "https://github.com/mefisto22/sinumhomeassistant",
-    "requirements": [],
-    "codeowners": [""],
-    "iot_class": "local_polling"
-  }
+  "domain": "sinum",
+  "name": "SINUM Integration",
+  "codeowners": ["@mefisto22"],
+  "config_flow": true,
+  "documentation": "https://github.com/mefisto22/sinumhomeassistant",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/mefisto22/sinumhomeassistant/issues",
+  "requirements": [],
+  "version": "2026.10.01"
+}

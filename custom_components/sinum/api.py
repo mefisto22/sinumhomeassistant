@@ -1,265 +1,144 @@
-import aiohttp
-import logging
+"""A SINUM e-Home helyi API (http://<host>/api/v1) kliense."""
+from __future__ import annotations
+
 import json
+import logging
+from typing import Any
+
+import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
-class SinumAPI:
-    """A SINUM rendszer API-hívásainak kezelője."""
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
-    def __init__(self, ip: str, token: str):
-        """
-        :param ip: pl. '192.168.22.22'
-        :param token: A cURL-ből ismert hitelesítési token
-        """
-        self.base_url = f"http://{ip}/api/v1"
-        self.headers = {
+# A vezérlő nem mindig küld megbízható charset-et. Sorrend: UTF-8 (BOM-mal vagy anélkül),
+# aztán a magyar ékezeteket helyesen kezelő cp1250, végül latin-1, ami mindent dekódol.
+_ENCODINGS = ("utf-8-sig", "cp1250", "latin-1")
+
+
+class SinumError(Exception):
+    """Általános SINUM API hiba."""
+
+
+class SinumConnectionError(SinumError):
+    """A vezérlő nem érhető el (hálózati hiba vagy timeout)."""
+
+
+class SinumAuthError(SinumError):
+    """A vezérlő elutasította az API tokent."""
+
+
+class SinumApiError(SinumError):
+    """A vezérlő hibás vagy értelmezhetetlen választ adott."""
+
+
+def normalize_host(host: str) -> str:
+    """'http://Sinum.local:80/api/v1/' -> 'sinum.local:80'."""
+    host = host.strip()
+    for prefix in ("http://", "https://"):
+        if host.lower().startswith(prefix):
+            host = host[len(prefix):]
+    return host.split("/", 1)[0].lower()
+
+
+def _decode_json(raw: bytes, path: str) -> Any:
+    for enc in _ENCODINGS:
+        try:
+            return json.loads(raw.decode(enc))
+        except (UnicodeDecodeError, ValueError):
+            continue
+    raise SinumApiError(f"{path}: invalid JSON response ({len(raw)} bytes)")
+
+
+def _error_message(raw: bytes) -> str:
+    """Az API hibaválaszából ({"error": {"message": ...}}) kiolvasható üzenet."""
+    try:
+        body = _decode_json(raw, "")
+    except SinumApiError:
+        return raw[:200].decode("latin-1")
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        return str(body["error"].get("message", body["error"]))
+    return str(body)[:200]
+
+
+class SinumClient:
+    """Egy SINUM vezérlő API-ja, a HA közös aiohttp session-jével."""
+
+    def __init__(self, session: aiohttp.ClientSession, host: str, token: str) -> None:
+        self._session = session
+        self.host = normalize_host(host)
+        self.base_url = f"http://{self.host}/api/v1"
+        self._headers = {
             "Authorization": token,
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
 
-    #
-    # ========== Virtuális eszközök (thermostat) ==========
-    #
+    async def _request(
+        self, method: str, path: str, payload: Any = None, *, allow_404: bool = False
+    ) -> Any:
+        url = f"{self.base_url}{path}"
+        try:
+            async with self._session.request(
+                method, url, headers=self._headers, json=payload, timeout=REQUEST_TIMEOUT
+            ) as resp:
+                status = resp.status
+                raw = await resp.read()
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise SinumConnectionError(
+                f"{method} {path}: {err or type(err).__name__}"
+            ) from err
 
-    async def get_virtual_devices(self):
-        url = f"{self.base_url}/devices/virtual"
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, headers=self.headers) as resp:
-                    resp.raise_for_status()
+        if status in (401, 403):
+            raise SinumAuthError(f"{method} {path}: HTTP {status}")
+        if status == 404 and allow_404:
+            return None
+        if status >= 400:
+            raise SinumApiError(f"{method} {path}: HTTP {status} {_error_message(raw)}")
+        if not raw:
+            return None
+        return _decode_json(raw, path)
 
-                    # Mindig nyers bájtokat olvasunk, majd több kódolással próbálunk JSON-t pars-olni.
-                    raw = await resp.read()
-                    raw_data = None
-                    for enc in ("utf-8", "utf-8-sig", "latin-1", "cp1250", "cp1252"):
-                        try:
-                            raw_text = raw.decode(enc)
-                            raw_data = json.loads(raw_text)
-                            break
-                        except Exception:
-                            continue
+    async def async_check_connection(self) -> None:
+        """Kapcsolat és token ellenőrzése (config flow)."""
+        data = await self._request("GET", "/devices/virtual")
+        if not isinstance(data, (dict, list)):
+            raise SinumApiError("/devices/virtual: unexpected response format")
 
-                    if raw_data is None:
-                        _LOGGER.error(
-                            "Virtual devices: JSON dekódolás sikertelen "
-                            "(content_type=%s, charset=%s, size=%dB, first200=%r)",
-                            getattr(resp, "content_type", None),
-                            getattr(resp, "charset", None),
-                            len(raw),
-                            raw[:200],
-                        )
-                        return []
+    async def async_get_devices(self, device_class: str) -> list[dict[str, Any]]:
+        """GET /devices/<class> -> eszközlista; minden elem 'class' mezőt kap."""
+        path = f"/devices/{device_class}"
+        data = await self._request("GET", path, allow_404=True)
+        if data is None:
+            # Ezt az eszközosztályt a vezérlő nem ismeri
+            return []
+        if isinstance(data, dict):
+            data = next(
+                (data[k] for k in ("data", "items", "results", "devices") if isinstance(data.get(k), list)),
+                None,
+            )
+        if not isinstance(data, list):
+            raise SinumApiError(f"{path}: unexpected response format")
+        devices = [d for d in data if isinstance(d, dict) and "id" in d]
+        for dev in devices:
+            dev["class"] = device_class
+        return devices
 
-                    # Kimenet normalizálás (dict-ben 'data' lista, vagy top-level lista)
-                    if isinstance(raw_data, dict):
-                        if isinstance(raw_data.get("data"), list):
-                            return raw_data["data"]
-                        for k in ("items", "results", "devices"):
-                            if isinstance(raw_data.get(k), list):
-                                return raw_data[k]
-                        return []
-                    elif isinstance(raw_data, list):
-                        return raw_data
-                    return []
-            except Exception as e:
-                _LOGGER.error("Error fetching virtual devices: %s", e)
-                return []
+    async def async_command(
+        self, device_class: str, device_id: int, command: str, payload: Any = None
+    ) -> Any:
+        """POST /devices/<class>/<id>/command/<command>, body: {<command>: payload} vagy {}."""
+        body = {} if payload is None else {command: payload}
+        _LOGGER.debug("Command %s/%s %s %s", device_class, device_id, command, body)
+        return await self._request(
+            "POST", f"/devices/{device_class}/{device_id}/command/{command}", body
+        )
 
-    async def set_thermostat_mode(self, device_id: int, new_mode: str):
-        url = f"{self.base_url}/devices/virtual/{device_id}"
-        payload = {
-            "id": device_id,
-            "mode": new_mode
-        }
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.patch(url, headers=self.headers, json=payload) as resp:
-                    resp.raise_for_status()
-                    return await resp.json()
-            except Exception as e:
-                _LOGGER.error("Error setting thermostat mode: %s", e)
-                return None
-
-    async def set_thermostat_target_temperature(self, device_id: int, new_target: int):
-        url = f"{self.base_url}/devices/virtual/{device_id}"
-        payload = {
-            "id": device_id,
-            "target_temperature": new_target
-        }
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.patch(url, headers=self.headers, json=payload) as resp:
-                    resp.raise_for_status()
-                    return await resp.json()
-            except Exception as e:
-                _LOGGER.error("Error setting target temperature: %s", e)
-                return None
-
-    #
-    # ========== SBUS + WTP -> relék, redőnyök, stb. ==========
-    #
-
-    async def get_sbus_devices(self):
-        url = f"{self.base_url}/devices/sbus"
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, headers=self.headers) as resp:
-                    resp.raise_for_status()
-                    raw_data = await resp.json()
-                    if isinstance(raw_data, dict) and "data" in raw_data:
-                        return raw_data["data"]
-                    return []
-            except Exception as e:
-                _LOGGER.error("Error fetching sbus devices: %s", e)
-                return []
-
-    async def get_wtp_devices(self):
-        url = f"{self.base_url}/devices/wtp"
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, headers=self.headers) as resp:
-                    resp.raise_for_status()
-                    raw_data = await resp.json()
-                    if isinstance(raw_data, dict) and "data" in raw_data:
-                        return raw_data["data"]
-                    return []
-            except Exception as e:
-                _LOGGER.error("Error fetching wtp devices: %s", e)
-                return []
-
-    #
-    # ========== ÚJ: Analog Output ==========
-    #
-
-    async def set_analog_output_value(self, device_id: int, value: int):
-        """
-        Set the value of an analog output.
-        POST /devices/sbus/<device_id>/command/set_value
-        Body: { "set_value": <value> }
-        """
-        url = f"{self.base_url}/devices/sbus/{device_id}/command/set_value"
-        payload = {"set_value": value}
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(url, headers=self.headers, json=payload) as resp:
-                    resp.raise_for_status()
-                    return await resp.json()
-            except aiohttp.ClientResponseError as e:
-                _LOGGER.error(f"Error setting analog output value for device {device_id}: {e.status}, message='{e.message}', url='{url}'")
-                return None
-            except Exception as e:
-                _LOGGER.error(f"Error setting analog output value for device {device_id}: {e}")
-                return None
-
-    #
-    # ========== ÚJ: PWM Duty Cycle Beállítása ==========
-    #
-
-    async def set_pwm_duty_cycle(self, device_class: str, device_id: int, duty_cycle: int):
-        """
-        Set the PWM duty cycle.
-        POST /devices/<device_class>/<device_id>/command/set_duty_cycle
-        Body: { "set_duty_cycle": <value> }
-        """
-        url = f"{self.base_url}/devices/{device_class}/{device_id}/command/set_duty_cycle"
-        payload = {"set_duty_cycle": duty_cycle}  # "set_duty_cycle" várható
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(url, headers=self.headers, json=payload) as resp:
-                    if resp.status == 422:
-                        # Részletes hibaüzenet naplózása
-                        error_details = await resp.text()
-                        _LOGGER.error(f"Unprocessable Entity when setting PWM duty cycle for device {device_id} ({device_class}): {error_details}")
-                        return None
-                    resp.raise_for_status()
-                    return await resp.json()
-            except aiohttp.ClientResponseError as e:
-                _LOGGER.error(f"Client response error setting PWM duty cycle for device {device_id} ({device_class}): {e.status}, message='{e.message}', url='{url}'")
-                return None
-            except Exception as e:
-                _LOGGER.error(f"Error setting PWM duty cycle for device {device_id} ({device_class}): {e}")
-                return None
-
-    #
-    # ========== Egyéb eszközkezelések ==========
-    #
-
-    async def get_all_relays(self):
-        sbus_list = await self.get_sbus_devices()
-        wtp_list = await self.get_wtp_devices()
-
-        sbus_relays = [d for d in sbus_list if d.get("type") == "relay"]
-        for dev in sbus_relays:
-            dev["class"] = "sbus"
-
-        wtp_relays = [d for d in wtp_list if d.get("type") == "relay"]
-        for dev in wtp_relays:
-            dev["class"] = "wtp"
-
-        return sbus_relays + wtp_relays
-
-    async def relay_turn_on(self, device_class: str, device_id: int):
-        url = f"{self.base_url}/devices/{device_class}/{device_id}/command/turn_on"
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(url, headers=self.headers, json={}) as resp:
-                    resp.raise_for_status()
-                    return await resp.json()
-            except aiohttp.ClientResponseError as e:
-                _LOGGER.error(f"Client response error turning relay ON for device {device_id} ({device_class}): {e.status}, message='{e.message}', url='{url}'")
-                return None
-            except Exception as e:
-                _LOGGER.error("Error turning relay ON: %s", e)
-                return None
-
-    async def relay_turn_off(self, device_class: str, device_id: int):
-        url = f"{self.base_url}/devices/{device_class}/{device_id}/command/turn_off"
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(url, headers=self.headers, json={}) as resp:
-                    resp.raise_for_status()
-                    return await resp.json()
-            except aiohttp.ClientResponseError as e:
-                _LOGGER.error(f"Client response error turning relay OFF for device {device_id} ({device_class}): {e.status}, message='{e.message}', url='{url}'")
-                return None
-            except Exception as e:
-                _LOGGER.error("Error turning relay OFF: %s", e)
-                return None
-
-    async def get_all_blind_controllers(self):
-        sbus_list = await self.get_sbus_devices()
-        wtp_list = await self.get_wtp_devices()
-
-        sbus_covers = [
-            dev for dev in sbus_list if dev.get("type") == "blind_controller"
-        ]
-        for dev in sbus_covers:
-            dev["class"] = "sbus"
-
-        wtp_covers = [
-            dev for dev in wtp_list if dev.get("type") == "blind_controller"
-        ]
-        for dev in wtp_covers:
-            dev["class"] = "wtp"
-
-        return sbus_covers + wtp_covers
-
-    async def set_cover_position(self, device_class: str, device_id: int, position: int):
-        url = f"{self.base_url}/devices/{device_class}/{device_id}"
-        payload = {
-            "id": device_id,
-            "target_opening": position
-        }
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.patch(url, headers=self.headers, json=payload) as resp:
-                    resp.raise_for_status()
-                    return await resp.json()
-            except aiohttp.ClientResponseError as e:
-                _LOGGER.error(f"Client response error setting cover position for device {device_id} ({device_class}): {e.status}, message='{e.message}', url='{url}'")
-                return None
-            except Exception as e:
-                _LOGGER.error("Error setting cover position: %s", e)
-                return None
+    async def async_update_device(
+        self, device_class: str, device_id: int, fields: dict[str, Any]
+    ) -> Any:
+        """PATCH /devices/<class>/<id> a megadott mezőkkel."""
+        _LOGGER.debug("Patch %s/%s %s", device_class, device_id, fields)
+        return await self._request(
+            "PATCH", f"/devices/{device_class}/{device_id}", {"id": device_id, **fields}
+        )

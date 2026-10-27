@@ -1,130 +1,46 @@
-import logging
-import colorsys
-from datetime import timedelta
-from typing import Optional
+from __future__ import annotations
 
-from homeassistant.config_entries import ConfigEntry
+import colorsys
+from typing import Any
+
+from homeassistant.components.light import (
+    ATTR_BRIGHTNESS,
+    ATTR_COLOR_TEMP_KELVIN,
+    ATTR_HS_COLOR,
+    DEFAULT_MAX_KELVIN,
+    DEFAULT_MIN_KELVIN,
+    ColorMode,
+    LightEntity,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator,
-    CoordinatorEntity,
-)
-from homeassistant.components.light import (
-    LightEntity,
-    ColorMode,
-    ATTR_BRIGHTNESS,
-    ATTR_HS_COLOR,
-    ATTR_COLOR_TEMP_KELVIN,
-    DEFAULT_MIN_KELVIN,
-    DEFAULT_MAX_KELVIN,
-    LightEntityFeature,
-)
 
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.device_registry import DeviceInfo
-
-from .api import SinumAPI
-from .const import DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
+from .coordinator import SinumConfigEntry
+from .entity import SinumEntity, slug
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up the 'light' platform for 'rgb_controller' devices."""
-    ip = config_entry.data["ip"]
-    token = config_entry.data["token"]
-    api = SinumAPI(ip, token)
-
-    coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name="SINUM RGB Controllers",
-        update_method=_create_rgb_fetcher(api),
-        update_interval=timedelta(seconds=1),
+    """'rgb_controller' típusú SBUS/WTP eszközök."""
+    coordinator = entry.runtime_data
+    async_add_entities(
+        SinumRGBControllerLight(coordinator, dev)
+        for dev in coordinator.devices()
+        if dev["class"] in ("sbus", "wtp") and dev.get("type") == "rgb_controller"
     )
 
-    try:
-        # Első frissítés
-        await coordinator.async_config_entry_first_refresh()
-    except Exception as err:
-        raise ConfigEntryNotReady(f"RGB controllers fetch failed: {err}") from err
 
-    devices = coordinator.data or []
-
-    entities = []
-    for dev in devices:
-        # dev["type"] == "rgb_controller"
-        device_class = dev.get("class")  # "wtp" / "sbus"
-        device_id = dev.get("id")
-        name_in_api = dev.get("name", "rgb_light")
-        base_name = name_in_api.lower().replace(" ", "_")
-
-        entities.append(
-            SinumRGBControllerLight(
-                coordinator=coordinator,
-                device=dev,
-                device_class=device_class,
-                device_id=device_id,
-                base_name=base_name,
-                api=api
-            )
-        )
-
-    async_add_entities(entities)
-
-
-def _create_rgb_fetcher(api: SinumAPI):
-    """
-    Egy factory-függvény, ami visszaad egy aszinkron _fetch_rgb_controllers
-    függvényt, hogy a coordinator update_method-ként tudja használni.
-    """
-    async def _fetch_rgb_controllers():
-        sbus_list = await api.get_sbus_devices()
-        wtp_list = await api.get_wtp_devices()
-
-        sbus_lights = [d for d in sbus_list if d.get("type") == "rgb_controller"]
-        for dev in sbus_lights:
-            dev["class"] = "sbus"
-
-        wtp_lights = [d for d in wtp_list if d.get("type") == "rgb_controller"]
-        for dev in wtp_lights:
-            dev["class"] = "wtp"
-
-        return sbus_lights + wtp_lights
-
-    return _fetch_rgb_controllers
-
-
-class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
+class SinumRGBControllerLight(SinumEntity, LightEntity):
     """
     LightEntity a "type": "rgb_controller" SBUS/WTP eszközökhöz.
     Fő különbség: a szerver a "led_color" mezőben tárolja a HEX színt,
     ezért a hs_color property is onnan olvassa ki.
     """
 
-    def __init__(
-        self,
-        coordinator: DataUpdateCoordinator,
-        device: dict,
-        device_class: str,
-        device_id: int,
-        base_name: str,
-        api: SinumAPI
-    ):
-        super().__init__(coordinator)
-        self._device = device
-        self._device_class = device_class
-        self._device_id = device_id
-        self._api = api
-
-        # Entitás paraméterek
-        self._attr_name = f"{base_name}_light"
-        self._attr_unique_id = f"{DOMAIN}_{device_class}_{device_id}_light"
+    def __init__(self, coordinator, device) -> None:
+        super().__init__(coordinator, device, "light")
+        self._attr_name = f"{slug(device.get('name', 'rgb_light'))}_light"
 
         # LED szalag típusa
         strip_type = device.get("led_strip_type", "rgb")  # "rgb", "rgbw", "rgbww"
@@ -139,27 +55,8 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
             self._attr_max_color_temp_kelvin = DEFAULT_MAX_KELVIN
 
     @property
-    def device_info(self) -> DeviceInfo:
-        """Egyetlen eszközbe csoportosítjuk (all_in_one)."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, "all_in_one")},
-            name="SINUM All-in-One",
-            manufacturer="SINUM",
-            model="RGB Controller Integration",
-        )
-
-    def _find_device_in_coordinator(self):
-        data = self.coordinator.data
-        if not data:
-            return None
-        for dev in data:
-            if dev.get("id") == self._device_id and dev.get("class") == self._device_class:
-                return dev
-        return None
-
-    @property
     def is_on(self) -> bool:
-        dev = self._find_device_in_coordinator()
+        dev = self.device
         if not dev:
             return False
         return bool(dev.get("state", False))
@@ -169,7 +66,7 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
         """
         0..255 (HA) <-> 0..100 (API)
         """
-        dev = self._find_device_in_coordinator()
+        dev = self.device
         if not dev:
             return None
         api_bri = dev.get("brightness", 100)
@@ -181,7 +78,7 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
         Itt a lényeg: a JSON-ban a szín a "led_color" mezőben van.
         Pl. dev["led_color"] = "#0072c3"
         """
-        dev = self._find_device_in_coordinator()
+        dev = self.device
         if not dev:
             return None
 
@@ -204,7 +101,7 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
         """
         if not self._attr_supported_color_modes or ColorMode.COLOR_TEMP not in self._attr_supported_color_modes:
             return None
-        dev = self._find_device_in_coordinator()
+        dev = self.device
         if not dev:
             return None
         kelvin = dev.get("white_temperature")
@@ -218,7 +115,7 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
         dev["color_mode"] == "temperature" => ColorMode.COLOR_TEMP,
         egyébként => ColorMode.HS
         """
-        dev = self._find_device_in_coordinator()
+        dev = self.device
         if not dev:
             return ColorMode.HS
         mode_in_api = dev.get("color_mode", "rgb")
@@ -230,10 +127,10 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
             return ColorMode.COLOR_TEMP
         return ColorMode.HS
 
-    async def async_turn_on(self, **kwargs) -> None:
+    async def async_turn_on(self, **kwargs: Any) -> None:
         """Bekapcsolás + paraméterek."""
         # 1) Bekapcs
-        await self._send_command("turn_on", {})
+        await self._send_command("turn_on")
 
         # 2) Összerakjuk a brightness factor-t
         new_ha_bri = kwargs.get(ATTR_BRIGHTNESS)
@@ -272,9 +169,9 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
 
         await self.coordinator.async_request_refresh()
 
-    async def async_turn_off(self, **kwargs) -> None:
+    async def async_turn_off(self, **kwargs: Any) -> None:
         """Kikapcs."""
-        await self._send_command("turn_off", {})
+        await self._send_command("turn_off")
         await self.coordinator.async_request_refresh()
 
     def _get_device_brightness_100(self) -> int:
@@ -282,44 +179,14 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
         Lekérdezzük a koordinátor adatából a brightness mezőt (0..100).
         Ha nincs, 100 a default.
         """
-        dev = self._find_device_in_coordinator()
+        dev = self.device
         if not dev:
             return 100
         return dev.get("brightness", 100)
 
-    async def _send_command(self, command: str, payload_data):
-        """
-        POST /devices/<class>/<id>/command/<command>, body=...
-        """
-        import aiohttp
-
-        url = f"{self._api.base_url}/devices/{self._device_class}/{self._device_id}/command/{command}"
-
-        body = {}
-        if command == "set_color":
-            body = {"set_color": payload_data}
-        elif command == "set_brightness":
-            body = {"set_brightness": payload_data}
-        elif command == "set_temperature":
-            body = {"set_temperature": payload_data}
-
-        _LOGGER.debug(
-            "Sending command=%s body=%s to device=%s/%s",
-            command,
-            body,
-            self._device_class,
-            self._device_id,
+    async def _send_command(self, command: str, payload_data: Any = None) -> None:
+        """POST /devices/<class>/<id>/command/<command>; hiba esetén HomeAssistantError."""
+        await self._async_call(
+            self.coordinator.client.async_command(self._dev_class, self._dev_id, command, payload_data),
+            refresh=False,
         )
-
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(
-                    url,
-                    headers=self._api.headers,
-                    json=body
-                ) as resp:
-                    resp.raise_for_status()
-                    return await resp.json()
-            except Exception as e:
-                _LOGGER.debug("Error sending %s command: %s", command, e)
-                return None

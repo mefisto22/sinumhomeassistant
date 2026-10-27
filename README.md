@@ -4,8 +4,14 @@ Jelenleg az integráció **alfa fázisban** van, ezért **csak saját felelőss�
 
 ## Telepítés
 
-Az integráció telepítése után csak az **IP címet** és a **token-t** kell megadnod.  
-Az egyes entitások frissítési ideje az integrációhoz tartozó `.py` fájlokban módosítható.
+Az integráció telepítése után a vezérlő **címét** (IP vagy hostnév, pl. `192.168.1.50` vagy `sinum.local`, opcionálisan porttal) és az **API tokent** kell megadnod. A beállításkor az integráció ellenőrzi a kapcsolatot és a tokent.
+
+- Több SINUM vezérlő is felvehető, mindegyik külön eszközként jelenik meg.
+- Ha a token lejár vagy megváltozik, a Home Assistant újrahitelesítést kér.
+- A vezérlő címe és tokenje később az integráció **Újrakonfigurálás** menüjében módosítható.
+- Az eszközök állapotát az integráció 2 másodpercenként, egyetlen közös lekérdezéssel frissíti. Ha a vezérlő nem érhető el, vagy egy eszköz offline, az entitások „nem elérhető” állapotba kerülnek.
+
+Verziózás: `ÉV.HÓNAP.SORSZÁM` (pl. `2026.10.01`).
 
 ## Integrált eszközök
 
@@ -32,8 +38,14 @@ The integration is currently in the **alpha phase**, so **use it at your own ris
 
 ## Installation
 
-After installing the integration, you only need to configure the **IP address** and **token**.  
-The update interval for each entity domain can be modified in the corresponding `.py` files.
+After installing the integration, enter the controller **host** (IP or hostname, e.g. `192.168.1.50` or `sinum.local`, optionally with a port) and the **API token**. The connection and the token are verified during setup.
+
+- Multiple SINUM controllers can be added; each one appears as its own device.
+- If the token expires or changes, Home Assistant asks you to re-authenticate.
+- The host and token can be changed later with the integration's **Reconfigure** option.
+- Device states are refreshed every 2 seconds with a single shared poll. If the controller is unreachable or a device is offline, its entities become unavailable.
+
+Versioning: `YEAR.MONTH.NN` (e.g. `2026.10.01`).
 
 ## Supported Devices
 

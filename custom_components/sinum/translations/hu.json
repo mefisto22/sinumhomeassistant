@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SINUM vezérlő",
+        "description": "Kapcsolódás a SINUM központi egységhez a helyi API-n keresztül.",
+        "data": {
+          "ip": "Host",
+          "token": "API token"
+        },
+        "data_description": {
+          "ip": "A SINUM központi egység IP-címe vagy hostneve, opcionálisan porttal (pl. 192.168.1.50 vagy sinum.local).",
+          "token": "A SINUM webes felületén létrehozott API kulcs."
+        }
+      },
+      "reauth_confirm": {
+        "title": "SINUM újrahitelesítés",
+        "description": "A(z) {host} SINUM vezérlő elutasította az API tokent. Adj meg egy újat.",
+        "data": {
+          "token": "API token"
+        }
+      },
+      "reconfigure": {
+        "title": "SINUM újrakonfigurálás",
+        "data": {
+          "ip": "Host",
+          "token": "API token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nem sikerült kapcsolódni a vezérlőhöz.",
+      "invalid_auth": "A vezérlő elutasította az API tokent.",
+      "invalid_host": "Érvénytelen host.",
+      "invalid_response": "Az eszköz nem SINUM vezérlőként válaszolt.",
+      "unknown": "Váratlan hiba."
+    },
+    "abort": {
+      "already_configured": "Ez a vezérlő már be van állítva.",
+      "reauth_successful": "Az újrahitelesítés sikerült.",
+      "reconfigure_successful": "Az újrakonfigurálás sikerült."
+    }
+  }
+}
