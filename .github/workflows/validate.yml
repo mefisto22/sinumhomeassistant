@@ -1,0 +1,55 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # brands: nincs bejegyzés a home-assistant/brands repóban;
+          # description, topics: a GitHub repó metaadatai még nincsenek kitöltve
+          ignore: brands description topics
+
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # hacs.json minimum
+          - ha: "2025.1"
+            python: "3.13"
+            phcc: "0.13.205"
+          - ha: "2026.2"
+            python: "3.13"
+            phcc: "0.13.316"
+          - ha: "2026.10"
+            python: "3.14"
+            phcc: "0.13.375"
+    name: pytest (HA ${{ matrix.ha }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+      - name: Függőségek
+        run: pip install "pytest-homeassistant-custom-component==${{ matrix.phcc }}"
+      - name: Tesztek
+        run: python -m pytest -q

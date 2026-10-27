@@ -1,0 +1,140 @@
+[
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_1_temp",
+  "entity_id": "sensor.sinum_all_in_one_nappali_temp",
+  "state": "0.0"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_1_humidity",
+  "entity_id": "sensor.sinum_all_in_one_nappali_humidity",
+  "state": "0.0"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_1_mode",
+  "entity_id": "sensor.sinum_all_in_one_nappali_mode",
+  "state": "heating"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_1_tempsetpoint",
+  "entity_id": "sensor.sinum_all_in_one_nappali_tempsetpoint",
+  "state": "21.5"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_sbus_2_temperature",
+  "entity_id": "sensor.sinum_all_in_one_temp_a_temperature",
+  "state": "21.5"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_sbus_3_humidity_sbuswtp",
+  "entity_id": "sensor.sinum_all_in_one_hum_a_humidity",
+  "state": "45.5"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_sbus_4_light",
+  "entity_id": "sensor.sinum_all_in_one_lux_a_light",
+  "state": "300"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_wtp_11_temperature",
+  "entity_id": "sensor.sinum_all_in_one_temp_w_temperature",
+  "state": "19.9"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_wtp_12_humidity_sbuswtp",
+  "entity_id": "sensor.sinum_all_in_one_hum_w_humidity",
+  "state": "50.0"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_battery_201_5",
+  "entity_id": "sensor.sinum_all_in_one_wms_v1_battery_battery",
+  "state": "80"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_battery_202_11",
+  "entity_id": "sensor.sinum_all_in_one_c_mini_v1_battery_battery",
+  "state": "55"
+ },
+ {
+  "platform": "sensor",
+  "unique_id": "sinum_battery_203_12",
+  "entity_id": "sensor.sinum_all_in_one_c_mini_v1_battery_battery_2",
+  "state": "56"
+ },
+ {
+  "platform": "binary_sensor",
+  "unique_id": "sinum_all_in_one_5_motion_sensor",
+  "entity_id": "binary_sensor.sinum_all_in_one_motion_a_binary_sensor",
+  "state": "off"
+ },
+ {
+  "platform": "binary_sensor",
+  "unique_id": "sinum_all_in_one_6_two_state_input_sensor",
+  "entity_id": "binary_sensor.sinum_all_in_one_door_input_binary_sensor",
+  "state": "on"
+ },
+ {
+  "platform": "select",
+  "unique_id": "sinum_1_mode_select",
+  "entity_id": "select.sinum_all_in_one_nappali_mode_select",
+  "state": "heating"
+ },
+ {
+  "platform": "number",
+  "unique_id": "sinum_all_in_one_1_temp_set",
+  "entity_id": "number.sinum_all_in_one_nappali_tempset",
+  "state": "21.5"
+ },
+ {
+  "platform": "number",
+  "unique_id": "sinum_all_in_one_9_analog_output",
+  "entity_id": "number.sinum_all_in_one_ao_analog_output",
+  "state": "2.0"
+ },
+ {
+  "platform": "number",
+  "unique_id": "sinum_all_in_one_10_pwm",
+  "entity_id": "number.sinum_all_in_one_pwm_pwm",
+  "state": "30"
+ },
+ {
+  "platform": "climate",
+  "unique_id": "sinum_1_climate",
+  "entity_id": "climate.sinum_all_in_one_nappali_climate",
+  "state": "heat"
+ },
+ {
+  "platform": "switch",
+  "unique_id": "sinum_sbus_1_relay",
+  "entity_id": "switch.sinum_all_in_one_relay_a_switch",
+  "state": "on"
+ },
+ {
+  "platform": "switch",
+  "unique_id": "sinum_wtp_1_relay",
+  "entity_id": "switch.sinum_all_in_one_relay_w_switch",
+  "state": "off"
+ },
+ {
+  "platform": "cover",
+  "unique_id": "sinum_sbus_8_cover",
+  "entity_id": "cover.sinum_all_in_one_blind_cover",
+  "state": "open"
+ },
+ {
+  "platform": "light",
+  "unique_id": "sinum_sbus_7_light",
+  "entity_id": "light.sinum_all_in_one_led_light",
+  "state": "on"
+ }
+]
