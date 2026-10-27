@@ -1,7 +1,6 @@
 {
   "domain": "sinum",
   "name": "SINUM Integration",
-  "categories": ["hubs_protocols.building_automation"],
   "codeowners": ["@mefisto22"],
   "config_flow": true,
   "documentation": "https://github.com/mefisto22/sinumhomeassistant",
