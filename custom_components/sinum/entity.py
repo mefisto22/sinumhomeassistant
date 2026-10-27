@@ -1,20 +1,29 @@
 """Közös alaposztály a SINUM entitásokhoz."""
 from __future__ import annotations
 
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import SinumError
 from .const import DOMAIN
 from .coordinator import SinumConfigEntry, SinumCoordinator
 
+CLASS_LABELS = {"sbus": "SBUS", "wtp": "WTP", "virtual": "Virtual"}
+
+# HA 2026.10 óta a szülőeszközt id-vel kell megadni (via_device_id); a régebbi
+# verziók csak az azonosító-párt (via_device) ismerik.
+_HAS_VIA_DEVICE_ID = "via_device_id" in DeviceInfo.__annotations__
+
 
 def hub_device_info(entry: SinumConfigEntry) -> DeviceInfo:
-    """Vezérlőnként egy eszköz (a régi, közös 'all_in_one' eszköz helyett)."""
+    """A vezérlő maga; a SINUM eszközök ehhez kapcsolódnak (via_device)."""
     return DeviceInfo(
         identifiers={(DOMAIN, entry.entry_id)},
         name="SINUM All-in-One",
@@ -24,17 +33,38 @@ def hub_device_info(entry: SinumConfigEntry) -> DeviceInfo:
     )
 
 
+def device_identifier(entry_id: str, device_class: str, device_id: int) -> tuple[str, str]:
+    return (DOMAIN, f"{entry_id}_{device_class}_{device_id}")
+
+
+def device_info(coordinator: SinumCoordinator, device: dict[str, Any]) -> DeviceInfo:
+    """Minden SINUM eszköz (class + id) külön HA eszköz, a SINUM szobájának területével."""
+    entry_id = coordinator.config_entry.entry_id
+    dev_class, dev_type = device["class"], device.get("type") or "device"
+    type_label = dev_type.replace("_", " ")
+    info = DeviceInfo(
+        identifiers={device_identifier(entry_id, dev_class, device["id"])},
+        name=device.get("name") or f"{type_label.capitalize()} {device['id']}",
+        manufacturer="SINUM",
+        model=f"{CLASS_LABELS.get(dev_class, dev_class)} {type_label}",
+        sw_version=device.get("software_version"),
+        # Csak az eszköz létrehozásakor számít; utána a felhasználó beállítása marad
+        suggested_area=coordinator.rooms.get(device.get("room_id")),
+    )
+    if _HAS_VIA_DEVICE_ID and coordinator.hub_device_id:
+        info["via_device_id"] = coordinator.hub_device_id
+    else:
+        info["via_device"] = (DOMAIN, entry_id)
+    return info
+
+
 def entity_unique_id(entry_id: str, device_class: str, device_id: int, key: str) -> str:
     return f"{entry_id}_{device_class}_{device_id}_{key}"
 
 
-def slug(name: str) -> str:
-    return name.lower().replace(" ", "_")
-
-
-# Az API érvényes nyers tartományai (tizedfok, tized-rH%); ezen kívül eső érték
-# (pl. -32768) azt jelzi, hogy nincs mérés.
-TEMPERATURE_RANGE = (-400, 1000)
+# Az API érvényes nyers páratartalom-tartománya (tized-rH%); a hőmérsékleté régiófüggő
+# (SinumCoordinator.temperature_range). Ezen kívül eső érték (pl. -32768) azt jelzi,
+# hogy nincs mérés.
 HUMIDITY_RANGE = (0, 1000)
 
 
@@ -69,8 +99,33 @@ def ensure_mode_mutable(device: dict[str, Any] | None) -> None:
         raise HomeAssistantError("SINUM: the thermostat mode is locked on the controller")
 
 
+@callback
+def async_add_device_entities(
+    entry: SinumConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+    build: Callable[[list[dict[str, Any]]], list[Entity]],
+) -> None:
+    """Entitások a meglévő és a később a vezérlőn megjelenő eszközökhöz (újratöltés nélkül)."""
+    coordinator = entry.runtime_data
+    known: set[tuple[str, int]] = set()
+
+    @callback
+    def _async_add_new() -> None:
+        new = [d for d in coordinator.devices() if (d["class"], d["id"]) not in known]
+        if not new:
+            return
+        known.update((d["class"], d["id"]) for d in new)
+        if entities := build(new):
+            async_add_entities(entities)
+
+    _async_add_new()
+    entry.async_on_unload(coordinator.async_add_listener(_async_add_new))
+
+
 class SinumEntity(CoordinatorEntity[SinumCoordinator]):
     """Egy SINUM eszköz (class + id) egy jellemzője."""
+
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any], key: str) -> None:
         super().__init__(coordinator)
@@ -78,7 +133,7 @@ class SinumEntity(CoordinatorEntity[SinumCoordinator]):
         self._dev_id: int = device["id"]
         entry = coordinator.config_entry
         self._attr_unique_id = entity_unique_id(entry.entry_id, self._dev_class, self._dev_id, key)
-        self._attr_device_info = hub_device_info(entry)
+        self._attr_device_info = device_info(coordinator, device)
 
     @property
     def device(self) -> dict[str, Any] | None:

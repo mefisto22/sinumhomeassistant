@@ -54,6 +54,34 @@
           }
         }
       }
+    },
+    "sensor": {
+      "mode": {
+        "name": "Mode",
+        "state": {
+          "off": "Off",
+          "heating": "Heating",
+          "cooling": "Cooling"
+        }
+      },
+      "target_temperature": {
+        "name": "Target temperature"
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Mode",
+        "state": {
+          "off": "Off",
+          "heating": "Heating",
+          "cooling": "Cooling"
+        }
+      }
+    },
+    "number": {
+      "target_temperature": {
+        "name": "Target temperature"
+      }
     }
   }
 }

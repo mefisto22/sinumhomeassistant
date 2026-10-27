@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import SinumConfigEntry
-from .entity import SinumEntity, has_label, slug
+from .entity import SinumEntity, async_add_device_entities, has_label
 
 COVERING_TYPE_TO_DEVICE_CLASS = {
     "roller_shade": CoverDeviceClass.SHADE,
@@ -26,10 +26,14 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(
-        SinumCoverEntity(coordinator, dev)
-        for dev in coordinator.devices()
-        if dev["class"] in ("sbus", "wtp") and dev.get("type") == "blind_controller"
+    async_add_device_entities(
+        entry,
+        async_add_entities,
+        lambda devices: [
+            SinumCoverEntity(coordinator, dev)
+            for dev in devices
+            if dev["class"] in ("sbus", "wtp") and dev.get("type") == "blind_controller"
+        ],
     )
 
 
@@ -40,9 +44,10 @@ class SinumCoverEntity(SinumEntity, CoverEntity):
     a vezérlő csak 0/50/100%-ot fogad el), billentés csak 'percent_tilt_control'-lal.
     """
 
+    _attr_name = None
+
     def __init__(self, coordinator, device) -> None:
         super().__init__(coordinator, device, "cover")
-        self._attr_name = f"{slug(device.get('name') or 'cover')}_cover"
         self._attr_device_class = COVERING_TYPE_TO_DEVICE_CLASS.get(device.get("window_covering_type"))
         features = CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
         if has_label(device, "percent_opening_control"):

@@ -7,24 +7,29 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import SinumConfigEntry
-from .entity import SinumEntity, slug
+from .entity import SinumEntity, async_add_device_entities
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(
-        SinumRelaySwitch(coordinator, dev)
-        for dev in coordinator.devices()
-        if dev["class"] in ("sbus", "wtp") and dev.get("type") == "relay"
+    async_add_device_entities(
+        entry,
+        async_add_entities,
+        lambda devices: [
+            SinumRelaySwitch(coordinator, dev)
+            for dev in devices
+            if dev["class"] in ("sbus", "wtp") and dev.get("type") == "relay"
+        ],
     )
 
 
 class SinumRelaySwitch(SinumEntity, SwitchEntity):
+    _attr_name = None
+
     def __init__(self, coordinator, device) -> None:
         super().__init__(coordinator, device, "relay")
-        self._attr_name = f"{slug(device.get('name') or 'relay')}_switch"
 
     @property
     def is_on(self) -> bool | None:

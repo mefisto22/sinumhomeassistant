@@ -1,42 +1,45 @@
 from __future__ import annotations
 
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
-from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import SinumConfigEntry
-from .entity import SinumEntity, slug
+from .entity import SinumEntity, async_add_device_entities
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = entry.runtime_data
-    entities: list[NumberEntity] = [
-        SinumThermostatSetpointNumber(coordinator, dev)
-        for dev in coordinator.devices("virtual")
-        if dev.get("type") == "thermostat"
-    ]
-    for dev in coordinator.devices():
-        if dev["class"] not in ("sbus", "wtp"):
-            continue
-        if dev.get("type") == "analog_output":
-            entities.append(SinumAnalogOutputNumber(coordinator, dev))
-        elif dev.get("type") == "pulse_width_modulation":
-            entities.append(SinumPWMNumber(coordinator, dev))
-    async_add_entities(entities)
+
+    def build(devices: list[dict]) -> list[NumberEntity]:
+        entities: list[NumberEntity] = []
+        for dev in devices:
+            dev_type = dev.get("type")
+            if dev["class"] == "virtual" and dev_type == "thermostat":
+                entities.append(SinumThermostatSetpointNumber(coordinator, dev))
+            elif dev["class"] in ("sbus", "wtp") and dev_type == "analog_output":
+                entities.append(SinumAnalogOutputNumber(coordinator, dev))
+            elif dev["class"] in ("sbus", "wtp") and dev_type == "pulse_width_modulation":
+                entities.append(SinumPWMNumber(coordinator, dev))
+        return entities
+
+    async_add_device_entities(entry, async_add_entities, build)
 
 
 class SinumThermostatSetpointNumber(SinumEntity, NumberEntity):
+    """Célhőmérséklet csúszkaként; a klíma entitás ugyanezt tudja."""
+
     _attr_mode = NumberMode.SLIDER
     _attr_device_class = NumberDeviceClass.TEMPERATURE
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_native_step = 0.1
+    _attr_translation_key = "target_temperature"
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator, device) -> None:
         super().__init__(coordinator, device, "temp_set")
-        self._attr_name = f"{slug(device.get('name', 'Thermostat'))}_tempset"
+        self._attr_native_unit_of_measurement = coordinator.temperature_unit
 
     def _tenths(self, field: str, default: int | None = None) -> float | None:
         dev = self.device
@@ -64,10 +67,10 @@ class SinumAnalogOutputNumber(SinumEntity, NumberEntity):
 
     _attr_mode = NumberMode.SLIDER
     _attr_native_step = 0.1
+    _attr_name = None
 
     def __init__(self, coordinator, device) -> None:
         super().__init__(coordinator, device, "analog_output")
-        self._attr_name = f"{slug(device.get('name', 'unknown_device'))}_analog_output"
         unit = device.get("unit", "V")
         self._attr_native_unit_of_measurement = "mA" if unit.lower() == "ua" else "V"
 
@@ -98,10 +101,10 @@ class SinumPWMNumber(SinumEntity, NumberEntity):
     _attr_native_min_value = 0.0
     _attr_native_max_value = 100.0
     _attr_native_step = 1.0
+    _attr_name = None
 
     def __init__(self, coordinator, device) -> None:
         super().__init__(coordinator, device, "pwm")
-        self._attr_name = f"{slug(device.get('name', 'unknown_device'))}_pwm"
 
     @property
     def native_value(self) -> float | None:

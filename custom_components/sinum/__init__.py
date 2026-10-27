@@ -6,12 +6,13 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import SinumClient, normalize_host
 from .const import CONF_IP, CONF_TOKEN, DOMAIN, PLATFORMS
 from .coordinator import SinumConfigEntry, SinumCoordinator, SinumData
-from .entity import entity_unique_id
+from .entity import device_identifier, entity_unique_id, hub_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,16 +28,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: SinumConfigEntry) -> boo
     # Hiba esetén ConfigEntryNotReady (újrapróbálás) vagy ConfigEntryAuthFailed (reauth)
     await coordinator.async_config_entry_first_refresh()
 
+    await coordinator.async_load_metadata()
+
     _async_set_entry_unique_id(hass, entry, client.host)
     _async_migrate_legacy_registry(hass, entry, coordinator.data)
 
     entry.runtime_data = coordinator
+    # A vezérlő eszköze előbb létezzen, mert a SINUM eszközök ehhez kapcsolódnak (via_device)
+    hub = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, **hub_device_info(entry))
+    coordinator.hub_device_id = hub.id
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SinumConfigEntry) -> bool:
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: SinumConfigEntry, device_entry: DeviceEntry
+) -> bool:
+    """A vezérlőről már törölt eszköz kézzel eltávolítható; a még létező nem."""
+    coordinator = entry.runtime_data
+    current = {(DOMAIN, entry.entry_id)} | {
+        device_identifier(entry.entry_id, dev["class"], dev["id"]) for dev in coordinator.devices()
+    }
+    return not device_entry.identifiers & current
 
 
 @callback

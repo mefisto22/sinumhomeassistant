@@ -5,28 +5,33 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import SinumConfigEntry
-from .entity import SinumEntity, ensure_mode_mutable, slug
+from .entity import SinumEntity, async_add_device_entities, ensure_mode_mutable
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(
-        SinumThermostatModeSelect(coordinator, dev)
-        for dev in coordinator.devices("virtual")
-        if dev.get("type") == "thermostat"
+    async_add_device_entities(
+        entry,
+        async_add_entities,
+        lambda devices: [
+            SinumThermostatModeSelect(coordinator, dev)
+            for dev in devices
+            if dev["class"] == "virtual" and dev.get("type") == "thermostat"
+        ],
     )
 
 
 class SinumThermostatModeSelect(SinumEntity, SelectEntity):
-    """A termosztát 'mode' mezője (off/heating/cooling)."""
+    """A termosztát 'mode' mezője (off/heating/cooling); a klíma entitás ugyanezt tudja."""
 
     _attr_options = ["off", "heating", "cooling"]
+    _attr_translation_key = "mode"
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator, device) -> None:
         super().__init__(coordinator, device, "mode_select")
-        self._attr_name = f"{slug(device.get('name') or 'thermostat')}_mode_select"
 
     @property
     def current_option(self) -> str | None:

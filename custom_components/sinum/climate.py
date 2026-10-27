@@ -8,7 +8,7 @@ from homeassistant.components.climate import (
     HVACAction,
     HVACMode,
 )
-from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.const import ATTR_TEMPERATURE
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -16,12 +16,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .coordinator import SinumConfigEntry
 from .entity import (
     HUMIDITY_RANGE,
-    TEMPERATURE_RANGE,
     SinumEntity,
+    async_add_device_entities,
     ensure_mode_mutable,
     has_label,
     measurement,
-    slug,
 )
 
 SINUM_TO_HVAC = {"heating": HVACMode.HEAT, "cooling": HVACMode.COOL}
@@ -37,21 +36,25 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(
-        SinumThermostatClimate(coordinator, dev)
-        for dev in coordinator.devices("virtual")
-        if dev.get("type") == "thermostat"
+    async_add_device_entities(
+        entry,
+        async_add_entities,
+        lambda devices: [
+            SinumThermostatClimate(coordinator, dev)
+            for dev in devices
+            if dev["class"] == "virtual" and dev.get("type") == "thermostat"
+        ],
     )
 
 
 class SinumThermostatClimate(SinumEntity, ClimateEntity):
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL]
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_name = None
     _attr_translation_key = "thermostat"
 
     def __init__(self, coordinator, device) -> None:
         super().__init__(coordinator, device, "climate")
-        self._attr_name = f"{slug(device.get('name') or 'thermostat')}_climate"
+        self._attr_temperature_unit = coordinator.temperature_unit
         self._attr_supported_features = (
             ClimateEntityFeature.TARGET_TEMPERATURE
             | ClimateEntityFeature.TURN_ON
@@ -88,7 +91,10 @@ class SinumThermostatClimate(SinumEntity, ClimateEntity):
         # 0: nincs hozzárendelt hőérzékelő
         dev = self.device
         return measurement(
-            dev and dev.get("temperature"), 10, TEMPERATURE_RANGE, zero_is_none=True
+            dev and dev.get("temperature"),
+            10,
+            self.coordinator.temperature_range,
+            zero_is_none=True,
         )
 
     @property

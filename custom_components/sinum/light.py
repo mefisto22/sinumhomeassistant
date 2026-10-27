@@ -18,7 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import SinumConfigEntry
-from .entity import SinumEntity, slug
+from .entity import SinumEntity, async_add_device_entities
 
 
 async def async_setup_entry(
@@ -26,10 +26,14 @@ async def async_setup_entry(
 ) -> None:
     """'rgb_controller' típusú SBUS/WTP eszközök."""
     coordinator = entry.runtime_data
-    async_add_entities(
-        SinumRGBControllerLight(coordinator, dev)
-        for dev in coordinator.devices()
-        if dev["class"] in ("sbus", "wtp") and dev.get("type") == "rgb_controller"
+    async_add_device_entities(
+        entry,
+        async_add_entities,
+        lambda devices: [
+            SinumRGBControllerLight(coordinator, dev)
+            for dev in devices
+            if dev["class"] in ("sbus", "wtp") and dev.get("type") == "rgb_controller"
+        ],
     )
 
 
@@ -53,13 +57,13 @@ def _hs_to_hex(hs_color: tuple[float, float]) -> str:
 class SinumRGBControllerLight(SinumEntity, LightEntity):
     """RGB vezérlő: szín 'led_color' (HEX), fényerő 'brightness' (1..100%), külön-külön."""
 
+    _attr_name = None
     _attr_supported_features = LightEntityFeature.TRANSITION
     _attr_min_color_temp_kelvin = DEFAULT_MIN_KELVIN
     _attr_max_color_temp_kelvin = DEFAULT_MAX_KELVIN
 
     def __init__(self, coordinator, device) -> None:
         super().__init__(coordinator, device, "light")
-        self._attr_name = f"{slug(device.get('name', 'rgb_light'))}_light"
         # Fehér csatornás szalagnál ("rgbw"/"rgbww") színhőmérséklet is állítható
         if device.get("led_strip_type", "rgb") == "rgb":
             self._attr_supported_color_modes = {ColorMode.HS}

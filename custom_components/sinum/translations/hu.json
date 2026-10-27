@@ -54,6 +54,34 @@
           }
         }
       }
+    },
+    "sensor": {
+      "mode": {
+        "name": "Üzemmód",
+        "state": {
+          "off": "Kikapcsolva",
+          "heating": "Fűtés",
+          "cooling": "Hűtés"
+        }
+      },
+      "target_temperature": {
+        "name": "Célhőmérséklet"
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Üzemmód",
+        "state": {
+          "off": "Kikapcsolva",
+          "heating": "Fűtés",
+          "cooling": "Hűtés"
+        }
+      }
+    },
+    "number": {
+      "target_temperature": {
+        "name": "Célhőmérséklet"
+      }
     }
   }
 }

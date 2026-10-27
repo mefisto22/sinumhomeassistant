@@ -5,7 +5,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import SinumConfigEntry
-from .entity import SinumEntity, slug
+from .entity import SinumEntity, async_add_device_entities
 
 # type -> az állapotot tartalmazó mező
 BINARY_TYPES = {
@@ -18,18 +18,23 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: SinumConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(
-        SinumBinarySensor(coordinator, dev)
-        for dev in coordinator.devices()
-        if dev["class"] in ("sbus", "wtp") and dev.get("type") in BINARY_TYPES
+    async_add_device_entities(
+        entry,
+        async_add_entities,
+        lambda devices: [
+            SinumBinarySensor(coordinator, dev)
+            for dev in devices
+            if dev["class"] in ("sbus", "wtp") and dev.get("type") in BINARY_TYPES
+        ],
     )
 
 
 class SinumBinarySensor(SinumEntity, BinarySensorEntity):
+    _attr_name = None
+
     def __init__(self, coordinator, device) -> None:
         self._type = device["type"]
         super().__init__(coordinator, device, self._type)
-        self._attr_name = f"{slug(device.get('name', 'Unnamed Sensor'))}_binary_sensor"
         # two_state_input_sensor: általános bemenet, nincs ismert jelentése -> nincs device_class
         if self._type == "motion_sensor":
             self._attr_device_class = BinarySensorDeviceClass.MOTION

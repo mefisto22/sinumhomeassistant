@@ -124,6 +124,25 @@ class SinumClient:
             dev["class"] = device_class
         return devices
 
+    async def async_get_rooms(self) -> dict[int, str]:
+        """GET /rooms -> {szoba id: név}."""
+        data = await self._request("GET", "/rooms", allow_404=True)
+        rooms = data.get("data") if isinstance(data, dict) else data
+        if not isinstance(rooms, list):
+            return {}
+        return {
+            room["id"]: room["name"]
+            for room in rooms
+            if isinstance(room, dict) and "id" in room and room.get("name")
+        }
+
+    async def async_get_region(self) -> str:
+        """GET /settings/locale -> 'eu' (°C, lx) vagy 'us' (°F, fc)."""
+        data = await self._request("GET", "/settings/locale", allow_404=True)
+        locale = data.get("data") if isinstance(data, dict) else None
+        region = locale.get("region") if isinstance(locale, dict) else None
+        return region if region in ("eu", "us") else "eu"
+
     async def async_command(
         self, device_class: str, device_id: int, command: str, payload: Any = None
     ) -> Any:
