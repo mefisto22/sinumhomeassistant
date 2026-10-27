@@ -244,7 +244,8 @@ class SinumRGBControllerLight(CoordinatorEntity, LightEntity):
         else:
             brightness_factor = new_ha_bri / 255
             # Elküldjük a set_brightness parancsot
-            api_bri = round(new_ha_bri * 100 / 255)
+            # API tartomány: 1..100 (0 nem érvényes)
+            api_bri = max(1, round(new_ha_bri * 100 / 255))
             await self._send_command("set_brightness", [api_bri])
 
         # 3) color_temp (Kelvin alapú új API)

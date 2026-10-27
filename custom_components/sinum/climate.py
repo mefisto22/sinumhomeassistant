@@ -110,11 +110,15 @@ class SinumThermostatClimate(CoordinatorEntity, ClimateEntity):
     @property
     def hvac_action(self) -> Optional[str]:
         mode = self.hvac_mode
+        if mode == HVACMode.OFF:
+            return HVACAction.OFF
+        # API: "state" = true, ha a termosztát éppen működik (fűt/hűt), false ha tétlen
+        dev = self._find_device_in_coordinator()
+        if not dev or not dev.get("state"):
+            return HVACAction.IDLE
         if mode == HVACMode.HEAT:
             return HVACAction.HEATING
-        elif mode == HVACMode.COOL:
-            return HVACAction.COOLING
-        return HVACAction.OFF
+        return HVACAction.COOLING
 
     @property
     def current_temperature(self) -> Optional[float]:

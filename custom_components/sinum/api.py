@@ -147,8 +147,7 @@ class SinumAPI:
                     resp.raise_for_status()
                     return await resp.json()
             except aiohttp.ClientResponseError as e:
-                error_body = await e.response.text()
-                _LOGGER.error(f"Error setting analog output value for device {device_id}: {e.status}, body='{error_body}', url='{url}'")
+                _LOGGER.error(f"Error setting analog output value for device {device_id}: {e.status}, message='{e.message}', url='{url}'")
                 return None
             except Exception as e:
                 _LOGGER.error(f"Error setting analog output value for device {device_id}: {e}")
@@ -177,8 +176,7 @@ class SinumAPI:
                     resp.raise_for_status()
                     return await resp.json()
             except aiohttp.ClientResponseError as e:
-                error_body = await e.response.text()
-                _LOGGER.error(f"Client response error setting PWM duty cycle for device {device_id} ({device_class}): {e.status}, body='{error_body}', url='{url}'")
+                _LOGGER.error(f"Client response error setting PWM duty cycle for device {device_id} ({device_class}): {e.status}, message='{e.message}', url='{url}'")
                 return None
             except Exception as e:
                 _LOGGER.error(f"Error setting PWM duty cycle for device {device_id} ({device_class}): {e}")
@@ -210,8 +208,7 @@ class SinumAPI:
                     resp.raise_for_status()
                     return await resp.json()
             except aiohttp.ClientResponseError as e:
-                error_body = await e.response.text()
-                _LOGGER.error(f"Client response error turning relay ON for device {device_id} ({device_class}): {e.status}, body='{error_body}', url='{url}'")
+                _LOGGER.error(f"Client response error turning relay ON for device {device_id} ({device_class}): {e.status}, message='{e.message}', url='{url}'")
                 return None
             except Exception as e:
                 _LOGGER.error("Error turning relay ON: %s", e)
@@ -225,8 +222,7 @@ class SinumAPI:
                     resp.raise_for_status()
                     return await resp.json()
             except aiohttp.ClientResponseError as e:
-                error_body = await e.response.text()
-                _LOGGER.error(f"Client response error turning relay OFF for device {device_id} ({device_class}): {e.status}, body='{error_body}', url='{url}'")
+                _LOGGER.error(f"Client response error turning relay OFF for device {device_id} ({device_class}): {e.status}, message='{e.message}', url='{url}'")
                 return None
             except Exception as e:
                 _LOGGER.error("Error turning relay OFF: %s", e)
@@ -262,8 +258,7 @@ class SinumAPI:
                     resp.raise_for_status()
                     return await resp.json()
             except aiohttp.ClientResponseError as e:
-                error_body = await e.response.text()
-                _LOGGER.error(f"Client response error setting cover position for device {device_id} ({device_class}): {e.status}, body='{error_body}', url='{url}'")
+                _LOGGER.error(f"Client response error setting cover position for device {device_id} ({device_class}): {e.status}, message='{e.message}', url='{url}'")
                 return None
             except Exception as e:
                 _LOGGER.error("Error setting cover position: %s", e)

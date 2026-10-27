@@ -7,7 +7,11 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.exceptions import ConfigEntryNotReady
 
@@ -226,6 +230,7 @@ class SbusWtpBase(CoordinatorEntity, SensorEntity):
 
 class ThermostatTempSensor(ThermostatBase):
     _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "°C"
 
     def __init__(self, coordinator, device, base_name):
@@ -246,6 +251,7 @@ class ThermostatTempSensor(ThermostatBase):
 
 class ThermostatHumiditySensor(ThermostatBase):
     _attr_device_class = SensorDeviceClass.HUMIDITY
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "%"
 
     def __init__(self, coordinator, device, base_name):
@@ -283,6 +289,7 @@ class ThermostatModeSensor(ThermostatBase):
 class ThermostatTempSetpointSensor(ThermostatBase):
     """Célhőmérséklet-szenzor."""
     _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "°C"
 
     def __init__(self, coordinator, device, base_name):
@@ -312,6 +319,7 @@ class SbusWtpTemperatureSensor(SbusWtpBase):
     mértékegysége: °C
     """
     _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "°C"
 
     def __init__(self, coordinator, device, base_name):
@@ -337,6 +345,7 @@ class SbusWtpHumiditySensor(SbusWtpBase):
     mértékegysége: %
     """
     _attr_device_class = SensorDeviceClass.HUMIDITY
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "%"
 
     def __init__(self, coordinator, device, base_name):
@@ -357,6 +366,7 @@ class SbusWtpHumiditySensor(SbusWtpBase):
 
 class SbusWtpLightSensor(SbusWtpBase):
     _attr_device_class = SensorDeviceClass.ILLUMINANCE
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "lx"
 
     def __init__(self, coordinator, device, base_name):
@@ -393,6 +403,7 @@ class BatterySensor(SbusWtpBase):
     """
 
     _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "%"
 
     def __init__(self, coordinator, device, base_name):

@@ -39,7 +39,7 @@ class SinumThermostatConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         """Ha opciós flow sincs, visszaadhatunk None-t vagy egy üres handler-t."""
-        return SinumThermostatOptionsFlowHandler(config_entry)
+        return SinumThermostatOptionsFlowHandler()
 
     def _is_valid_ip(self, ip):
         """Check if the provided IP address is valid."""
@@ -52,9 +52,6 @@ class SinumThermostatConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class SinumThermostatOptionsFlowHandler(config_entries.OptionsFlow):
     """Ha töröljük a felesleges opciókat, üresen is hagyhatjuk, vagy akár törölhetjük is."""
-
-    def __init__(self, config_entry):
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         """Handle the options configuration."""

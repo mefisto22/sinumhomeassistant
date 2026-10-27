@@ -108,8 +108,7 @@ class SinumBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Return the class of the binary sensor."""
         if self._type == "motion_sensor":
             return "motion"
-        elif self._type == "two_state_input_sensor":
-            return "motion"  # Ha szükséges, módosítsd a megfelelő device_class-ra
+        # two_state_input_sensor: általános bemenet, nincs ismert jelentése -> nincs device_class
         return None
 
     def _find_device_in_coordinator(self):
