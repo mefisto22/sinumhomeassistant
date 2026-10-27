@@ -120,6 +120,12 @@ class SinumClient:
         if not isinstance(data, list):
             raise SinumApiError(f"{path}: unexpected response format")
         devices = [d for d in data if isinstance(d, dict) and "id" in d]
+        # A vezérlő néha egy másik osztály listáját adja vissza (pl. /devices/wtp az
+        # SBUS eszközöket); ezek nem ehhez az osztályhoz tartoznak.
+        foreign = [d for d in devices if d.get("class", device_class) != device_class]
+        if foreign:
+            _LOGGER.debug("%s: ignoring %d devices of another class", path, len(foreign))
+            devices = [d for d in devices if d not in foreign]
         for dev in devices:
             dev["class"] = device_class
         return devices

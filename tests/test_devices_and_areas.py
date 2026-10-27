@@ -231,3 +231,25 @@ async def test_P3_entity_ids_kept_after_split(hass, mock_api):
         assert ent_reg.async_get_entity_id(platform, DOMAIN, _uid(entry, key)) == entity_id
         assert hass.states.get(entity_id) is not None
         assert ent_reg.async_get(entity_id).device_id != hub.id
+
+
+async def test_foreign_class_devices_ignored(hass, mock_api, api_data):
+    """A vezérlő a /devices/wtp-re néha az SBUS listát adja: ebből nem lehet WTP eszköz."""
+    entry = make_entry(hass)
+    await setup(hass, entry)
+    devices_before = len(dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id))
+    entities_before = len(ents(hass, entry))
+    mock_api.add(r"/devices/wtp$", method="GET", payload={"data": api_data["sbus"]})
+    await _tick(hass, 3)
+    assert len(dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)) == devices_before
+    assert len(ents(hass, entry)) == entities_before
+    assert _device(hass, entry, "wtp", 10) is None  # az SBUS PWM (id 10) nem lett WTP eszköz
+    assert entry.runtime_data.devices("wtp") == []
+
+
+async def test_foreign_class_devices_ignored_at_setup(hass, mock_api, api_data):
+    mock_api.add(r"/devices/wtp$", method="GET", payload={"data": api_data["sbus"]})
+    entry = make_entry(hass)
+    await setup(hass, entry)
+    assert not [e for e in ents(hass, entry) if "_wtp_" in e.unique_id]
+    assert _device(hass, entry, "wtp", 1) is None
