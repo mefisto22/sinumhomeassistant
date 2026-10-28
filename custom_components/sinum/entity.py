@@ -121,7 +121,8 @@ def module_device_info(coordinator: SinumCoordinator, module: tuple[str, int]) -
         name=name or f"{label} {parent_id}",
         manufacturer="SINUM",
         model=f"{label} {model}" if model else label,
-        sw_version=parent.get("version") or fallback_version,
+        # A vezérlő a modul verziójában is a modellnévvel adja (pl. "R-S3 v1.2.7")
+        sw_version=_split_version(parent.get("version"))[1] or fallback_version,
         # Csak az eszköz létrehozásakor számít; utána a felhasználó beállítása marad
         suggested_area=coordinator.rooms.get(room_id) if isinstance(room_id, int) else None,
     )

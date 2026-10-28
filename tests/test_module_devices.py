@@ -39,7 +39,7 @@ VIRTUAL = [
 ]
 ROOMS = {"data": [{"id": 3, "name": "Földszint szoba"}, {"id": 4, "name": "Kazánház"}]}
 PARENTS = {"data": [
-    {"id": 50, "name": "R-S3", "model": "R-S3", "version": "1.2.7", "class": "sbus", "devices": [20, 21, 22]},
+    {"id": 50, "name": "R-S3", "model": "R-S3", "version": "R-S3 v1.2.7", "class": "sbus", "devices": [20, 21, 22]},
     {"id": 60, "name": "Kazánház relék", "model": "PS-08m", "version": "2.0.1", "class": "sbus", "devices": [30, 31]},
 ]}
 
@@ -125,7 +125,7 @@ async def test_module_without_parent_endpoint_falls_back(hass, mock_api):
     assert _module(hass, entry, 50).name == "Földszint szoba"
 
 
-async def test_old_per_endpoint_devices_are_merged(hass, mock_api):
+async def test_old_per_endpoint_devices_are_merged(hass, mock_api, caplog):
     """A korábbi eszközök entitásai (a letiltottak is) átkerülnek; az entity_id-k maradnak."""
     _routes(mock_api)
     entry = make_entry(hass)
@@ -158,6 +158,8 @@ async def test_old_per_endpoint_devices_are_merged(hass, mock_api):
     assert temp.device_id == panel.id
     assert hass.states.get("sensor.regi_homerseklet").state == "21.5"
     assert ent_reg.async_get("sensor.regi_mod").device_id == panel.id
+    # a HA 2026.10-ben elavult eszközregiszter-hívások nélkül
+    assert "Detected that custom integration 'sinum'" not in caplog.text
 
 
 async def test_module_device_cannot_be_removed(hass, mock_api, api_data):

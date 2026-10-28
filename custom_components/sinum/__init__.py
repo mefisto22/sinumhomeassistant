@@ -196,7 +196,7 @@ def _async_migrate_to_module_devices(
         for old in old_devices:
             for ent in er.async_entries_for_device(ent_reg, old.id, include_disabled_entities=True):
                 ent_reg.async_update_entity(ent.entity_id, device_id=new.id)
-            dev_reg.async_update_device(old.id, remove_config_entry_id=entry.entry_id)
+            dev_reg.async_remove_device(old.id)
     if old_by_module:
         _LOGGER.info(
             "Merged %d SINUM devices into %d physical modules",
