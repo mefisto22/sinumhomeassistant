@@ -75,10 +75,9 @@ class SinumAnalogOutputNumber(SinumEntity, NumberEntity):
 
     _attr_mode = NumberMode.SLIDER
     _attr_native_step = 0.1
-    _attr_name = None
 
     def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
-        super().__init__(coordinator, device, "analog_output")
+        super().__init__(coordinator, device, "analog_output", primary=True)
         unit = device.get("unit", "V")
         self._attr_native_unit_of_measurement = "mA" if unit.lower() == "ua" else "V"
 
@@ -111,10 +110,9 @@ class SinumPWMNumber(SinumEntity, NumberEntity):
     _attr_native_min_value = 0.0
     _attr_native_max_value = 100.0
     _attr_native_step = 1.0
-    _attr_name = None
 
     def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
-        super().__init__(coordinator, device, "pwm")
+        super().__init__(coordinator, device, "pwm", primary=True)
 
     @property
     def native_value(self) -> float | None:

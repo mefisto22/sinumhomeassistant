@@ -12,7 +12,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import SinumClient, normalize_host
 from .const import CONF_IP, CONF_TOKEN, DOMAIN, PLATFORMS
 from .coordinator import SinumConfigEntry, SinumCoordinator, SinumData
-from .entity import device_identifier, entity_unique_id, hub_device_info
+from .entity import (
+    current_device_identifier,
+    device_identifier,
+    entity_unique_id,
+    hub_device_info,
+    module_device_info,
+    module_of,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,6 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SinumConfigEntry) -> boo
     # A vezérlő eszköze előbb létezzen, mert a SINUM eszközök ehhez kapcsolódnak (via_device)
     hub = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, **hub_device_info(entry))
     coordinator.hub_device_id = hub.id
+    _async_migrate_to_module_devices(hass, entry, coordinator)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -51,7 +59,7 @@ async def async_remove_config_entry_device(
     """A vezérlőről már törölt eszköz kézzel eltávolítható; a még létező nem."""
     coordinator = entry.runtime_data
     current = {(DOMAIN, entry.entry_id)} | {
-        device_identifier(entry.entry_id, dev["class"], dev["id"]) for dev in coordinator.devices()
+        current_device_identifier(coordinator, dev) for dev in coordinator.devices()
     }
     return not device_entry.identifiers & current
 
@@ -151,3 +159,47 @@ def _async_migrate_legacy_registry(
         migrated += 1
     if migrated:
         _LOGGER.info("Migrated %d SINUM entity unique IDs", migrated)
+
+
+@callback
+def _async_migrate_to_module_devices(
+    hass: HomeAssistant, entry: SinumConfigEntry, coordinator: SinumCoordinator
+) -> None:
+    """A korábbi, végpontonkénti HA eszközök a fizikai modul eszközébe olvadnak.
+
+    Az entitások (a letiltottak is) átkerülnek a modul eszközére, így az entity_id-k
+    és az előzmények megmaradnak; az új eszköz a régiek területét kapja (elsősorban
+    a termosztátét), az üres régi eszközök törlődnek.
+    """
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+    by_identifier = {
+        identifier: device
+        for device in dr.async_entries_for_config_entry(dev_reg, entry.entry_id)
+        for identifier in device.identifiers
+    }
+    old_by_module: dict[tuple[str, int], list[DeviceEntry]] = {}
+    # A termosztát előre kerül, hogy az ő területe legyen az elsődleges
+    for dev in sorted(coordinator.devices(), key=lambda d: d["class"] != "virtual"):
+        module = module_of(coordinator, dev)
+        old = by_identifier.get(device_identifier(entry.entry_id, dev["class"], dev["id"]))
+        if module is not None and old is not None:
+            old_by_module.setdefault(module, []).append(old)
+
+    for module, old_devices in old_by_module.items():
+        info = module_device_info(coordinator, module)
+        is_new = not info["identifiers"] & by_identifier.keys()
+        new = dev_reg.async_get_or_create(config_entry_id=entry.entry_id, **info)
+        area_id = next((d.area_id for d in old_devices if d.area_id), None)
+        if is_new and area_id is not None and new.area_id != area_id:
+            dev_reg.async_update_device(new.id, area_id=area_id)
+        for old in old_devices:
+            for ent in er.async_entries_for_device(ent_reg, old.id, include_disabled_entities=True):
+                ent_reg.async_update_entity(ent.entity_id, device_id=new.id)
+            dev_reg.async_update_device(old.id, remove_config_entry_id=entry.entry_id)
+    if old_by_module:
+        _LOGGER.info(
+            "Merged %d SINUM devices into %d physical modules",
+            sum(map(len, old_by_module.values())),
+            len(old_by_module),
+        )

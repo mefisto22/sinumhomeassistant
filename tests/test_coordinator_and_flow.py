@@ -72,8 +72,8 @@ async def test_P1_removed_device_unavailable(hass, mock_api, api_data):
 async def test_P1_polling_load(hass, mock_api):
     entry = make_entry(hass)
     await setup(hass, entry)
-    # egy kör (sbus + wtp + virtual) + szobák és régió a beállításkor
-    assert count_calls(mock_api) == 5
+    # egy kör (sbus + wtp + virtual) + szobák, modulok (sbus + wtp) és régió a beállításkor
+    assert count_calls(mock_api) == 7
     start = count_calls(mock_api)
     for _ in range(30):
         await _tick(hass, 2)

@@ -8,6 +8,8 @@ CONF_TOKEN = "token"
 
 # A lekérdezett eszközosztályok (/devices/<class>)
 DEVICE_CLASSES = ("sbus", "wtp", "virtual")
+# A fizikai modullal (/parent-devices/<class>) rendelkező osztályok
+PARENT_CLASSES = ("sbus", "wtp")
 
 UPDATE_INTERVAL = timedelta(seconds=2)
 

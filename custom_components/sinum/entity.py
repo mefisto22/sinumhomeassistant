@@ -1,6 +1,7 @@
 """Közös alaposztály a SINUM entitásokhoz."""
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, cast
 
@@ -12,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import SinumAuthError, SinumConnectionError, SinumError
-from .const import DOMAIN
+from .const import DOMAIN, PARENT_CLASSES
 from .coordinator import SinumConfigEntry, SinumCoordinator
 
 CLASS_LABELS = {"sbus": "SBUS", "wtp": "WTP", "virtual": "Virtual"}
@@ -37,8 +38,108 @@ def device_identifier(entry_id: str, device_class: str, device_id: int) -> tuple
     return (DOMAIN, f"{entry_id}_{device_class}_{device_id}")
 
 
+def module_identifier(entry_id: str, module: tuple[str, int]) -> tuple[str, str]:
+    device_class, parent_id = module
+    return (DOMAIN, f"{entry_id}_{device_class}_module_{parent_id}")
+
+
+def module_of(coordinator: SinumCoordinator, device: dict[str, Any]) -> tuple[str, int] | None:
+    """Az eszköz fizikai modulja (osztály, parent_id), ha van.
+
+    A SINUM eszközök egy fizikai modul végpontjai (pl. egy R-S3 szobai panel
+    hőmérséklet-, páratartalom- és padlóérzékelője). A virtuális termosztát a
+    hozzárendelt szabályzó (vagy szobai érzékelő) moduljához tartozik.
+    """
+    if device["class"] == "virtual":
+        if device.get("type") != "thermostat":
+            return None
+        associations = device.get("associations") or {}
+        for role in ("temperature_regulator", "room_temperature_sensor"):
+            ref = associations.get(role)
+            if not isinstance(ref, dict) or ref.get("class") not in PARENT_CLASSES:
+                continue
+            if not isinstance(ref_id := ref.get("id"), int):
+                continue
+            endpoint = coordinator.data.get(ref["class"], {}).get(ref_id)
+            if endpoint and isinstance(endpoint.get("parent_id"), int):
+                return (ref["class"], endpoint["parent_id"])
+        return None
+    parent_id = device.get("parent_id")
+    if device["class"] in PARENT_CLASSES and isinstance(parent_id, int):
+        return (device["class"], parent_id)
+    return None
+
+
+def current_device_identifier(coordinator: SinumCoordinator, device: dict[str, Any]) -> tuple[str, str]:
+    """Annak a HA eszköznek az azonosítója, amelyhez az eszköz entitásai tartoznak."""
+    entry_id = coordinator.config_entry.entry_id
+    if (module := module_of(coordinator, device)) is not None:
+        return module_identifier(entry_id, module)
+    return device_identifier(entry_id, device["class"], device["id"])
+
+
+def _split_version(software_version: Any) -> tuple[str | None, str | None]:
+    """'R-S3 v1.2.7' -> ('R-S3', '1.2.7')."""
+    if not isinstance(software_version, str) or not software_version:
+        return None, None
+    model, sep, version = software_version.rpartition(" v")
+    return (model, version) if sep and model else (None, software_version)
+
+
+def module_device_info(coordinator: SinumCoordinator, module: tuple[str, int]) -> DeviceInfo:
+    """Egy fizikai modul HA eszköze; ha termosztát tartozik hozzá, a szobáról kapja a nevét."""
+    entry_id = coordinator.config_entry.entry_id
+    dev_class, parent_id = module
+    endpoints = sorted(
+        (d for d in coordinator.devices(dev_class) if d.get("parent_id") == parent_id),
+        key=lambda d: d["id"],
+    )
+    thermostat = next(
+        (
+            d
+            for d in sorted(coordinator.devices("virtual"), key=lambda d: d["id"])
+            if module_of(coordinator, d) == module
+        ),
+        None,
+    )
+    parent = coordinator.parents.get(module, {})
+    fallback_model, fallback_version = _split_version(
+        next((d.get("software_version") for d in endpoints if d.get("software_version")), None)
+    )
+    model = parent.get("model") or fallback_model
+    if thermostat is not None:
+        room_id = thermostat.get("room_id")
+        name = coordinator.rooms.get(room_id) if isinstance(room_id, int) else None
+        name = name or thermostat.get("name")
+    else:
+        rooms = Counter(d["room_id"] for d in endpoints if isinstance(d.get("room_id"), int))
+        room_id = rooms.most_common(1)[0][0] if rooms else None
+        name = parent.get("name") or model
+    label = CLASS_LABELS.get(dev_class, dev_class)
+    info = DeviceInfo(
+        identifiers={module_identifier(entry_id, module)},
+        name=name or f"{label} {parent_id}",
+        manufacturer="SINUM",
+        model=f"{label} {model}" if model else label,
+        sw_version=parent.get("version") or fallback_version,
+        # Csak az eszköz létrehozásakor számít; utána a felhasználó beállítása marad
+        suggested_area=coordinator.rooms.get(room_id) if isinstance(room_id, int) else None,
+    )
+    _link_to_hub(coordinator, info)
+    return info
+
+
+def _link_to_hub(coordinator: SinumCoordinator, info: DeviceInfo) -> None:
+    """Az eszköz a vezérlő alá kerül."""
+    if _HAS_VIA_DEVICE_ID and coordinator.hub_device_id:
+        info["via_device_id"] = coordinator.hub_device_id
+    else:
+        # A via_device kulcs a régebbi HA-verziók DeviceInfo típusában még szerepel
+        cast(dict[str, Any], info)["via_device"] = (DOMAIN, coordinator.config_entry.entry_id)
+
+
 def device_info(coordinator: SinumCoordinator, device: dict[str, Any]) -> DeviceInfo:
-    """Minden SINUM eszköz (class + id) külön HA eszköz, a SINUM szobájának területével."""
+    """Modul nélküli SINUM eszköz (class + id) saját HA eszköze, a SINUM szobájának területével."""
     entry_id = coordinator.config_entry.entry_id
     dev_class, dev_type = device["class"], device.get("type") or "device"
     type_label = dev_type.replace("_", " ")
@@ -52,12 +153,28 @@ def device_info(coordinator: SinumCoordinator, device: dict[str, Any]) -> Device
         # Csak az eszköz létrehozásakor számít; utána a felhasználó beállítása marad
         suggested_area=coordinator.rooms.get(room_id) if isinstance(room_id, int) else None,
     )
-    if _HAS_VIA_DEVICE_ID and coordinator.hub_device_id:
-        info["via_device_id"] = coordinator.hub_device_id
-    else:
-        # A via_device kulcs a régebbi HA-verziók DeviceInfo típusában még szerepel
-        cast(dict[str, Any], info)["via_device"] = (DOMAIN, entry_id)
+    _link_to_hub(coordinator, info)
     return info
+
+
+def entity_name(device: dict[str, Any], device_name: str | None) -> str | None:
+    """Egy modul végpontjának entitásneve: a SINUM-beli név, az eszköznév előtag nélkül.
+
+    Pl. a 'Dolgozószoba' eszközön a 'Dolgozószoba páratartalom' -> 'Páratartalom'.
+    None: az entitás az eszköz nevét kapja.
+    """
+    name = (device.get("name") or "").strip()
+    if not name:
+        return f"{(device.get('type') or 'device').replace('_', ' ').capitalize()} {device['id']}"
+    if not device_name:
+        return name
+    if name.casefold() == device_name.casefold():
+        return None
+    prefix = f"{device_name} "
+    if name.casefold().startswith(prefix.casefold()):
+        rest = name[len(prefix):].strip()
+        return rest[:1].upper() + rest[1:]
+    return name
 
 
 def entity_unique_id(entry_id: str, device_class: str, device_id: int, key: str) -> str:
@@ -125,17 +242,36 @@ def async_add_device_entities(
 
 
 class SinumEntity(CoordinatorEntity[SinumCoordinator]):
-    """Egy SINUM eszköz (class + id) egy jellemzője."""
+    """Egy SINUM eszköz (class + id) egy jellemzője.
+
+    Az entitás a fizikai modul HA eszközére kerül, ha van ilyen, különben a SINUM
+    eszköz sajátjára. Az eszköz fő entitása (primary) a SINUM-beli nevét kapja,
+    a modul nélküli eszközön pedig az eszköz nevét.
+    """
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any], key: str) -> None:
+    def __init__(
+        self,
+        coordinator: SinumCoordinator,
+        device: dict[str, Any],
+        key: str,
+        *,
+        primary: bool = False,
+    ) -> None:
         super().__init__(coordinator)
         self._dev_class: str = device["class"]
         self._dev_id: int = device["id"]
         entry = coordinator.config_entry
         self._attr_unique_id = entity_unique_id(entry.entry_id, self._dev_class, self._dev_id, key)
-        self._attr_device_info = device_info(coordinator, device)
+        if (module := module_of(coordinator, device)) is None:
+            self._attr_device_info = device_info(coordinator, device)
+            if primary:
+                self._attr_name = None
+        else:
+            self._attr_device_info = module_device_info(coordinator, module)
+            if primary:
+                self._attr_name = entity_name(device, self._attr_device_info.get("name"))
 
     @property
     def device(self) -> dict[str, Any] | None:

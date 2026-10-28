@@ -12,7 +12,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import SinumConfigEntry, SinumCoordinator
-from .entity import HUMIDITY_RANGE, SinumEntity, async_add_device_entities, measurement
+from .entity import (
+    HUMIDITY_RANGE,
+    SinumEntity,
+    async_add_device_entities,
+    measurement,
+    module_of,
+)
 
 # 'us' régióban a fényszenzor foot-candle-t ad; 1 fc = 10,764 lx
 FOOT_CANDLE_PER_LUX = 0.09290304
@@ -39,15 +45,19 @@ async def async_setup_entry(
         for dev in devices:
             dev_type = dev.get("type")
             if dev["class"] == "virtual" and dev_type == "thermostat":
+                # A szobai panel eszközén a panel saját érzékelői mellett külön névvel
+                merged = module_of(coordinator, dev) is not None
                 entities += [
                     # 0: nincs hozzárendelt érzékelő
                     SinumSensor(
                         coordinator, dev, "temp", "temperature", 10, TEMPERATURE,
                         valid_range=temp_range, zero_is_none=True,
+                        translation_key="thermostat_temperature" if merged else None,
                     ),
                     SinumSensor(
                         coordinator, dev, "humidity", "humidity", 10, HUMIDITY,
                         valid_range=HUMIDITY_RANGE, zero_is_none=True,
+                        translation_key="thermostat_humidity" if merged else None,
                     ),
                     # A klíma entitás ugyanezt mutatja, ezért alapból letiltva
                     SinumSensor(
@@ -121,7 +131,7 @@ class SinumSensor(SinumEntity, SensorEntity):
         translation_key: str | None = None,
         enabled_default: bool = True,
     ) -> None:
-        super().__init__(coordinator, device, key)
+        super().__init__(coordinator, device, key, primary=primary)
         self._field = field
         self._divisor = divisor
         self._valid_range = valid_range
@@ -136,9 +146,6 @@ class SinumSensor(SinumEntity, SensorEntity):
         elif device_class is SensorDeviceClass.ILLUMINANCE and divisor is not None:
             self._attr_suggested_display_precision = 0
         self._attr_native_unit_of_measurement = unit
-        # Az eszköz fő mérése az eszköz nevét kapja, a többi a sajátját
-        if primary:
-            self._attr_name = None
         self._attr_translation_key = translation_key
         self._attr_entity_registry_enabled_default = enabled_default
 

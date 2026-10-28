@@ -30,10 +30,9 @@ async def async_setup_entry(
 
 
 class SinumRelaySwitch(SinumEntity, SwitchEntity):
-    _attr_name = None
 
     def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
-        super().__init__(coordinator, device, "relay")
+        super().__init__(coordinator, device, "relay", primary=True)
 
     @property
     def is_on(self) -> bool | None:

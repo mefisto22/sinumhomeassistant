@@ -66,6 +66,12 @@
       },
       "target_temperature": {
         "name": "Célhőmérséklet"
+      },
+      "thermostat_temperature": {
+        "name": "Termosztát hőmérséklet"
+      },
+      "thermostat_humidity": {
+        "name": "Termosztát páratartalom"
       }
     },
     "select": {

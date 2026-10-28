@@ -66,6 +66,12 @@
       },
       "target_temperature": {
         "name": "Target temperature"
+      },
+      "thermostat_temperature": {
+        "name": "Thermostat temperature"
+      },
+      "thermostat_humidity": {
+        "name": "Thermostat humidity"
       }
     },
     "select": {

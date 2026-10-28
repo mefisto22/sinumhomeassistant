@@ -48,10 +48,9 @@ class SinumCoverEntity(SinumEntity, CoverEntity):
     a vezérlő csak 0/50/100%-ot fogad el), billentés csak 'percent_tilt_control'-lal.
     """
 
-    _attr_name = None
 
     def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
-        super().__init__(coordinator, device, "cover")
+        super().__init__(coordinator, device, "cover", primary=True)
         self._attr_device_class = COVERING_TYPE_TO_DEVICE_CLASS.get(device.get("window_covering_type", ""))
         features = CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
         if has_label(device, "percent_opening_control"):

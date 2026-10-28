@@ -130,6 +130,23 @@ class SinumClient:
             dev["class"] = device_class
         return devices
 
+    async def async_get_parent_devices(self, device_class: str) -> list[dict[str, Any]]:
+        """GET /parent-devices/<class> -> a fizikai modulok (név, modell, verzió).
+
+        A válasz a modul végpontjait ('devices') is tartalmazza; azokat a
+        /devices/<class> már hozza, ezért elhagyjuk.
+        """
+        data = await self._request("GET", f"/parent-devices/{device_class}", allow_404=True)
+        if isinstance(data, dict):
+            data = data.get("data")
+        if not isinstance(data, list):
+            return []
+        return [
+            {key: value for key, value in parent.items() if key != "devices"}
+            for parent in data
+            if isinstance(parent, dict) and isinstance(parent.get("id"), int)
+        ]
+
     async def async_get_rooms(self) -> dict[int, str]:
         """GET /rooms -> {szoba id: név}."""
         data = await self._request("GET", "/rooms", allow_404=True)

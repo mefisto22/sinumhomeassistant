@@ -61,13 +61,12 @@ def _hs_to_hex(hs_color: tuple[float, float]) -> str:
 class SinumRGBControllerLight(SinumEntity, LightEntity):
     """RGB vezérlő: szín 'led_color' (HEX), fényerő 'brightness' (1..100%), külön-külön."""
 
-    _attr_name = None
     _attr_supported_features = LightEntityFeature.TRANSITION
     _attr_min_color_temp_kelvin = DEFAULT_MIN_KELVIN
     _attr_max_color_temp_kelvin = DEFAULT_MAX_KELVIN
 
     def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
-        super().__init__(coordinator, device, "light")
+        super().__init__(coordinator, device, "light", primary=True)
         # Fehér csatornás szalagnál ("rgbw"/"rgbww") színhőmérséklet is állítható
         if device.get("led_strip_type", "rgb") == "rgb":
             self._attr_supported_color_modes = {ColorMode.HS}

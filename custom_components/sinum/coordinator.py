@@ -12,7 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import SinumAuthError, SinumClient, SinumError
-from .const import DEVICE_CLASSES, DOMAIN, UPDATE_INTERVAL
+from .const import DEVICE_CLASSES, DOMAIN, PARENT_CLASSES, UPDATE_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,17 +38,29 @@ class SinumCoordinator(DataUpdateCoordinator[SinumData]):
         # A beállításkor egyszer lekérdezett kiegészítő adatok
         self.rooms: dict[int, str] = {}
         self.region = "eu"
+        # Fizikai modulok: (osztály, parent_id) -> modul adatai
+        self.parents: dict[tuple[str, int], dict[str, Any]] = {}
         # A vezérlő HA eszköze; a SINUM eszközök ehhez kapcsolódnak
         self.hub_device_id: str | None = None
 
     async def async_load_metadata(self) -> None:
-        """Szobanevek (területekhez) és régió (mértékegységekhez); hiba esetén alapértékek."""
+        """Szobanevek (területekhez), régió (mértékegységekhez) és a fizikai modulok
+        (eszköznevekhez); hiba esetén alapértékek."""
         try:
             self.rooms = await self.client.async_get_rooms()
         except SinumAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except SinumError as err:
             _LOGGER.debug("Could not read SINUM rooms: %s", err)
+        for cls in PARENT_CLASSES:
+            try:
+                parents = await self.client.async_get_parent_devices(cls)
+            except SinumAuthError as err:
+                raise ConfigEntryAuthFailed(str(err)) from err
+            except SinumError as err:
+                _LOGGER.debug("Could not read SINUM %s modules: %s", cls, err)
+                continue
+            self.parents.update({(cls, parent["id"]): parent for parent in parents})
         try:
             self.region = await self.client.async_get_region()
         except SinumError as err:

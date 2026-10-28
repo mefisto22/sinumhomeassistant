@@ -36,11 +36,10 @@ async def async_setup_entry(
 
 
 class SinumBinarySensor(SinumEntity, BinarySensorEntity):
-    _attr_name = None
 
     def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
         self._type = device["type"]
-        super().__init__(coordinator, device, self._type)
+        super().__init__(coordinator, device, self._type, primary=True)
         # two_state_input_sensor: általános bemenet, nincs ismert jelentése -> nincs device_class
         if self._type == "motion_sensor":
             self._attr_device_class = BinarySensorDeviceClass.MOTION
