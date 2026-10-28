@@ -14,7 +14,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .coordinator import SinumConfigEntry
+from .coordinator import SinumConfigEntry, SinumCoordinator
 from .entity import (
     HUMIDITY_RANGE,
     SinumEntity,
@@ -57,7 +57,7 @@ class SinumThermostatClimate(SinumEntity, ClimateEntity):
     _attr_name = None
     _attr_translation_key = "thermostat"
 
-    def __init__(self, coordinator, device) -> None:
+    def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
         super().__init__(coordinator, device, "climate")
         self._attr_temperature_unit = coordinator.temperature_unit
         self._attr_supported_features = (
@@ -69,16 +69,16 @@ class SinumThermostatClimate(SinumEntity, ClimateEntity):
         if isinstance(device.get("target_temperature_mode"), dict):
             self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
 
-    def _tenths(self, field: str, default: int | None = None) -> float | None:
+    def _tenths(self, field: str) -> float | None:
         """Az API a hőmérsékleteket tizedfokban adja."""
         dev = self.device
-        raw = dev.get(field, default) if dev else default
+        raw = dev.get(field) if dev else None
         return None if raw is None else raw / 10.0
 
     @property
     def hvac_mode(self) -> HVACMode:
         dev = self.device
-        return SINUM_TO_HVAC.get(dev.get("mode"), HVACMode.OFF) if dev else HVACMode.OFF
+        return SINUM_TO_HVAC.get(dev.get("mode", ""), HVACMode.OFF) if dev else HVACMode.OFF
 
     @property
     def hvac_action(self) -> HVACAction:
@@ -113,11 +113,13 @@ class SinumThermostatClimate(SinumEntity, ClimateEntity):
 
     @property
     def min_temp(self) -> float:
-        return self._tenths("target_temperature_minimum", 50)
+        value = self._tenths("target_temperature_minimum")
+        return 5.0 if value is None else value
 
     @property
     def max_temp(self) -> float:
-        return self._tenths("target_temperature_maximum", 350)
+        value = self._tenths("target_temperature_maximum")
+        return 35.0 if value is None else value
 
     @property
     def preset_mode(self) -> str | None:

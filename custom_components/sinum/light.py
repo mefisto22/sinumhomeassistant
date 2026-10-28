@@ -17,7 +17,7 @@ from homeassistant.components.light import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .coordinator import SinumConfigEntry
+from .coordinator import SinumConfigEntry, SinumCoordinator
 from .entity import SinumEntity, async_add_device_entities
 
 
@@ -66,7 +66,7 @@ class SinumRGBControllerLight(SinumEntity, LightEntity):
     _attr_min_color_temp_kelvin = DEFAULT_MIN_KELVIN
     _attr_max_color_temp_kelvin = DEFAULT_MAX_KELVIN
 
-    def __init__(self, coordinator, device) -> None:
+    def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
         super().__init__(coordinator, device, "light")
         # Fehér csatornás szalagnál ("rgbw"/"rgbww") színhőmérséklet is állítható
         if device.get("led_strip_type", "rgb") == "rgb":
@@ -76,7 +76,7 @@ class SinumRGBControllerLight(SinumEntity, LightEntity):
 
     @property
     def _supports_color_temp(self) -> bool:
-        return ColorMode.COLOR_TEMP in self._attr_supported_color_modes
+        return ColorMode.COLOR_TEMP in (self._attr_supported_color_modes or ())
 
     @property
     def is_on(self) -> bool:
@@ -147,4 +147,4 @@ def _transition(kwargs: dict[str, Any]) -> int | None:
     seconds = kwargs.get(ATTR_TRANSITION)
     if seconds is None:
         return None
-    return min(6000, max(1, round(seconds * 10)))
+    return min(6000, max(1, round(float(seconds) * 10)))

@@ -151,6 +151,36 @@ async def test_P2_setpoint_rounding(hass, mock_api):
     ]
 
 
+@pytest.mark.parametrize(
+    ("limits", "expected"),
+    [
+        ({}, (5.0, 35.0, 5.0, 35.0, 0.0, 10.0)),
+        ({"target_temperature_minimum": 70, "value_minimum": 1000}, (7.0, 35.0, 7.0, 35.0, 1.0, 10.0)),
+        # A vezérlő null-t is küldhet; ilyenkor is az alapértelmezett határ érvényes
+        ({"target_temperature_minimum": None, "target_temperature_maximum": None,
+          "value_minimum": None, "value_maximum": None}, (5.0, 35.0, 5.0, 35.0, 0.0, 10.0)),
+    ],
+)
+async def test_P2_min_max_limits(hass, mock_api, api_data, limits, expected):
+    thermostat, analog = _dev(api_data, "virtual", 1), _dev(api_data, "sbus", 9)
+    for dev in (thermostat, analog):
+        for key in ("target_temperature_minimum", "target_temperature_maximum", "value_minimum", "value_maximum"):
+            dev.pop(key, None)
+    for key, value in limits.items():
+        (thermostat if key.startswith("target") else analog)[key] = value
+    entry = await _loaded(hass, mock_api)
+    reg = er.async_get(hass)
+
+    def attrs(platform, key):
+        entity_id = reg.async_get_entity_id(platform, "sinum", f"{entry.entry_id}_{key}")
+        return hass.states.get(entity_id).attributes
+
+    climate = attrs("climate", "virtual_1_climate")
+    setpoint = attrs("number", "virtual_1_temp_set")
+    ao = attrs("number", "sbus_9_analog_output")
+    assert (climate["min_temp"], climate["max_temp"], setpoint["min"], setpoint["max"], ao["min"], ao["max"]) == expected
+
+
 # ------------------------------------------------------------ cover
 async def test_P2_cover_stop_and_position(hass, mock_api, api_data):
     _dev(api_data, "sbus", 8)["window_covering_type"] = "roller_shade"

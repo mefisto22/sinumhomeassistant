@@ -1,2 +1,3 @@
 # A CI mátrix felülírja a verziót; helyi futtatáshoz a legfrissebb támogatott HA.
 pytest-homeassistant-custom-component==0.13.375
+mypy==2.4.0

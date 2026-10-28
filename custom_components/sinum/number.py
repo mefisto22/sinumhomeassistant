@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .coordinator import SinumConfigEntry
+from .coordinator import SinumConfigEntry, SinumCoordinator
 from .entity import SinumEntity, async_add_device_entities
 
 
@@ -17,7 +19,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
 
-    def build(devices: list[dict]) -> list[NumberEntity]:
+    def build(devices: list[dict[str, Any]]) -> list[NumberEntity]:
         entities: list[NumberEntity] = []
         for dev in devices:
             dev_type = dev.get("type")
@@ -41,22 +43,24 @@ class SinumThermostatSetpointNumber(SinumEntity, NumberEntity):
     _attr_translation_key = "target_temperature"
     _attr_entity_registry_enabled_default = False
 
-    def __init__(self, coordinator, device) -> None:
+    def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
         super().__init__(coordinator, device, "temp_set")
         self._attr_native_unit_of_measurement = coordinator.temperature_unit
 
-    def _tenths(self, field: str, default: int | None = None) -> float | None:
+    def _tenths(self, field: str) -> float | None:
         dev = self.device
-        raw = dev.get(field, default) if dev else default
+        raw = dev.get(field) if dev else None
         return None if raw is None else raw / 10.0
 
     @property
     def native_min_value(self) -> float:
-        return self._tenths("target_temperature_minimum", 50)
+        value = self._tenths("target_temperature_minimum")
+        return 5.0 if value is None else value
 
     @property
     def native_max_value(self) -> float:
-        return self._tenths("target_temperature_maximum", 350)
+        value = self._tenths("target_temperature_maximum")
+        return 35.0 if value is None else value
 
     @property
     def native_value(self) -> float | None:
@@ -73,23 +77,25 @@ class SinumAnalogOutputNumber(SinumEntity, NumberEntity):
     _attr_native_step = 0.1
     _attr_name = None
 
-    def __init__(self, coordinator, device) -> None:
+    def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
         super().__init__(coordinator, device, "analog_output")
         unit = device.get("unit", "V")
         self._attr_native_unit_of_measurement = "mA" if unit.lower() == "ua" else "V"
 
-    def _thousandths(self, field: str, default: int | None = None) -> float | None:
+    def _thousandths(self, field: str) -> float | None:
         dev = self.device
-        raw = dev.get(field, default) if dev else default
+        raw = dev.get(field) if dev else None
         return None if raw is None else raw / 1000.0
 
     @property
     def native_min_value(self) -> float:
-        return self._thousandths("value_minimum", 0)
+        value = self._thousandths("value_minimum")
+        return 0.0 if value is None else value
 
     @property
     def native_max_value(self) -> float:
-        return self._thousandths("value_maximum", 10000)
+        value = self._thousandths("value_maximum")
+        return 10.0 if value is None else value
 
     @property
     def native_value(self) -> float | None:
@@ -107,7 +113,7 @@ class SinumPWMNumber(SinumEntity, NumberEntity):
     _attr_native_step = 1.0
     _attr_name = None
 
-    def __init__(self, coordinator, device) -> None:
+    def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
         super().__init__(coordinator, device, "pwm")
 
     @property

@@ -1,8 +1,8 @@
 """Közös alaposztály a SINUM entitásokhoz."""
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any, cast
 
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -42,6 +42,7 @@ def device_info(coordinator: SinumCoordinator, device: dict[str, Any]) -> Device
     entry_id = coordinator.config_entry.entry_id
     dev_class, dev_type = device["class"], device.get("type") or "device"
     type_label = dev_type.replace("_", " ")
+    room_id = device.get("room_id")
     info = DeviceInfo(
         identifiers={device_identifier(entry_id, dev_class, device["id"])},
         name=device.get("name") or f"{type_label.capitalize()} {device['id']}",
@@ -49,12 +50,13 @@ def device_info(coordinator: SinumCoordinator, device: dict[str, Any]) -> Device
         model=f"{CLASS_LABELS.get(dev_class, dev_class)} {type_label}",
         sw_version=device.get("software_version"),
         # Csak az eszköz létrehozásakor számít; utána a felhasználó beállítása marad
-        suggested_area=coordinator.rooms.get(device.get("room_id")),
+        suggested_area=coordinator.rooms.get(room_id) if isinstance(room_id, int) else None,
     )
     if _HAS_VIA_DEVICE_ID and coordinator.hub_device_id:
         info["via_device_id"] = coordinator.hub_device_id
     else:
-        info["via_device"] = (DOMAIN, entry_id)
+        # A via_device kulcs a régebbi HA-verziók DeviceInfo típusában még szerepel
+        cast(dict[str, Any], info)["via_device"] = (DOMAIN, entry_id)
     return info
 
 
@@ -90,7 +92,7 @@ def measurement(
 
 
 def has_label(device: dict[str, Any] | None, label: str) -> bool:
-    return bool(device) and label in (device.get("labels") or [])
+    return device is not None and label in (device.get("labels") or [])
 
 
 def ensure_mode_mutable(device: dict[str, Any] | None) -> None:
@@ -103,7 +105,7 @@ def ensure_mode_mutable(device: dict[str, Any] | None) -> None:
 def async_add_device_entities(
     entry: SinumConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    build: Callable[[list[dict[str, Any]]], list[Entity]],
+    build: Callable[[list[dict[str, Any]]], Sequence[Entity]],
 ) -> None:
     """Entitások a meglévő és a később a vezérlőn megjelenő eszközökhöz (újratöltés nélkül)."""
     coordinator = entry.runtime_data

@@ -3,9 +3,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import voluptuous as vol
+# HA 2026.10 óta a "voluptuous" modul valójában a probatio (a HA betöltéskor cseréli
+# le), és a flow-k probatio sémát várnak; a típusellenőrzés is ezt lássa.
+if TYPE_CHECKING:
+    import probatio as vol
+else:
+    import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 

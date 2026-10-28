@@ -53,9 +53,10 @@ A tesztek valódi Home Assistant tesztpéldányon, hamis SINUM API-val futnak:
 ```bash
 pip install -r requirements_test.txt
 pytest
+mypy
 ```
 
-A GitHub Actions minden pushnál lefuttatja a hassfest és a HACS ellenőrzést, valamint a teszteket a Home Assistant 2025.1, 2026.2 és 2026.10 verzióján.
+A kód szigorú típusellenőrzésen (`mypy --strict`) megy át. A GitHub Actions minden pushnál lefuttatja a hassfest és a HACS ellenőrzést, a típusellenőrzést, valamint a teszteket a Home Assistant 2025.1, 2026.2 és 2026.10 verzióján.
 
 Verziózás: `ÉV.HÓNAP.SORSZÁM` (pl. `2026.10.01`).
 
@@ -116,8 +117,9 @@ The tests run against a real Home Assistant test instance with a fake SINUM API:
 ```bash
 pip install -r requirements_test.txt
 pytest
+mypy
 ```
 
-GitHub Actions runs hassfest, the HACS validation and the tests on Home Assistant 2025.1, 2026.2 and 2026.10 on every push.
+The code passes strict type checking (`mypy --strict`). GitHub Actions runs hassfest, the HACS validation, the type check and the tests on Home Assistant 2025.1, 2026.2 and 2026.10 on every push.
 
 Versioning: `YEAR.MONTH.NN` (e.g. `2026.10.01`).

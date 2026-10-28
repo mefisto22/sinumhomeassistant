@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .coordinator import SinumConfigEntry
+from .coordinator import SinumConfigEntry, SinumCoordinator
 from .entity import SinumEntity, async_add_device_entities
 
 # type -> az állapotot tartalmazó mező
@@ -36,7 +38,7 @@ async def async_setup_entry(
 class SinumBinarySensor(SinumEntity, BinarySensorEntity):
     _attr_name = None
 
-    def __init__(self, coordinator, device) -> None:
+    def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
         self._type = device["type"]
         super().__init__(coordinator, device, self._type)
         # two_state_input_sensor: általános bemenet, nincs ismert jelentése -> nincs device_class

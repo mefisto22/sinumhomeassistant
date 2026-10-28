@@ -12,7 +12,7 @@ from homeassistant.components.cover import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .coordinator import SinumConfigEntry
+from .coordinator import SinumConfigEntry, SinumCoordinator
 from .entity import SinumEntity, async_add_device_entities, has_label
 
 COVERING_TYPE_TO_DEVICE_CLASS = {
@@ -50,9 +50,9 @@ class SinumCoverEntity(SinumEntity, CoverEntity):
 
     _attr_name = None
 
-    def __init__(self, coordinator, device) -> None:
+    def __init__(self, coordinator: SinumCoordinator, device: dict[str, Any]) -> None:
         super().__init__(coordinator, device, "cover")
-        self._attr_device_class = COVERING_TYPE_TO_DEVICE_CLASS.get(device.get("window_covering_type"))
+        self._attr_device_class = COVERING_TYPE_TO_DEVICE_CLASS.get(device.get("window_covering_type", ""))
         features = CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
         if has_label(device, "percent_opening_control"):
             features |= CoverEntityFeature.SET_POSITION
