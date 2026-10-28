@@ -31,7 +31,8 @@ VIRTUAL = [
      "state": False, "temperature": 0, "humidity": 0, "target_temperature": 215,
      "target_temperature_minimum": 50, "target_temperature_maximum": 350, "parent_id": None,
      "associations": {"temperature_regulator": {"class": "sbus", "id": 22},
-                      "room_temperature_sensor": {"class": "sbus", "id": 20}},
+                      "room_temperature_sensor": {"class": "sbus", "id": 20},
+                      "humidity_sensor": {"class": "sbus", "id": 21}},
      **ROOM},
     # hozzárendelés nélküli termosztát: saját eszköz
     {"id": 3, "class": "virtual", "type": "thermostat", "name": "Pince", "mode": "off", "state": False,
@@ -89,8 +90,9 @@ async def test_module_groups_endpoints_and_thermostat(hass, mock_api):
     assert {"sbus_20_temperature", "sbus_21_humidity", "virtual_2_climate", "virtual_2_temp",
             "virtual_2_humidity", "virtual_2_mode_select"} <= on_panel
 
-    assert _name(hass, _entity(hass, entry, "sbus_20_temperature")) == "Földszint szoba Hőmérséklet"
-    assert _name(hass, _entity(hass, entry, "sbus_21_humidity")) == "Földszint szoba Páratartalom"
+    # a termosztát ugyanezeket mutatja, ezért a panel saját érzékelői alapból letiltva
+    for suffix in ("sbus_20_temperature", "sbus_21_humidity"):
+        assert _entity(hass, entry, suffix).disabled_by is er.RegistryEntryDisabler.INTEGRATION
     assert _name(hass, _entity(hass, entry, "virtual_2_climate")) == "Földszint szoba"
     assert _name(hass, _entity(hass, entry, "virtual_2_temp")) == "Földszint szoba Thermostat temperature"
     assert _name(hass, _entity(hass, entry, "virtual_2_humidity")) == "Földszint szoba Thermostat humidity"
@@ -156,10 +158,27 @@ async def test_old_per_endpoint_devices_are_merged(hass, mock_api, caplog):
         assert dev_reg.async_get(device.id) is None
     temp = ent_reg.async_get("sensor.regi_homerseklet")
     assert temp.device_id == panel.id
-    assert hass.states.get("sensor.regi_homerseklet").state == "21.5"
+    # a termosztát által is mutatott panelérzékelő egyszer letiltódik
+    assert temp.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert entry.minor_version == 2
     assert ent_reg.async_get("sensor.regi_mod").device_id == panel.id
     # a HA 2026.10-ben elavult eszközregiszter-hívások nélkül
     assert "Detected that custom integration 'sinum'" not in caplog.text
+
+
+async def test_reenabled_panel_sensor_stays_enabled(hass, mock_api):
+    """Az egyszeri letiltás után a felhasználó által engedélyezett érzékelő marad."""
+    _routes(mock_api)
+    entry = make_entry(hass)
+    ent_reg = er.async_get(hass)
+    ent_reg.async_get_or_create(
+        "sensor", "sinum", f"{entry.entry_id}_sbus_21_humidity", config_entry=entry,
+        suggested_object_id="panel_para",
+    )
+    hass.config_entries.async_update_entry(entry, minor_version=2)
+    await setup(hass, entry)
+    assert ent_reg.async_get("sensor.panel_para").disabled_by is None
+    assert hass.states.get("sensor.panel_para").state == "45.5"
 
 
 async def test_module_device_cannot_be_removed(hass, mock_api, api_data):

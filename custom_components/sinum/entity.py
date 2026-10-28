@@ -70,6 +70,27 @@ def module_of(coordinator: SinumCoordinator, device: dict[str, Any]) -> tuple[st
     return None
 
 
+def thermostat_sensor_endpoints(coordinator: SinumCoordinator) -> set[tuple[str, int]]:
+    """A termosztátok saját panelükön lévő hozzárendelt érzékelői (osztály, id).
+
+    A termosztát ezek értékét adja tovább a saját hőmérséklet- és páratartalom-
+    szenzorán, így ugyanazon az eszközön kétszer jelenne meg ugyanaz a mérés.
+    """
+    endpoints: set[tuple[str, int]] = set()
+    for thermostat in coordinator.devices("virtual"):
+        if (module := module_of(coordinator, thermostat)) is None:
+            continue
+        associations = thermostat.get("associations") or {}
+        for role in ("room_temperature_sensor", "humidity_sensor"):
+            ref = associations.get(role)
+            if not isinstance(ref, dict) or not isinstance(ref_id := ref.get("id"), int):
+                continue
+            endpoint = coordinator.data.get(ref.get("class", ""), {}).get(ref_id)
+            if endpoint and module_of(coordinator, endpoint) == module:
+                endpoints.add((endpoint["class"], ref_id))
+    return endpoints
+
+
 def current_device_identifier(coordinator: SinumCoordinator, device: dict[str, Any]) -> tuple[str, str]:
     """Annak a HA eszköznek az azonosítója, amelyhez az eszköz entitásai tartoznak."""
     entry_id = coordinator.config_entry.entry_id

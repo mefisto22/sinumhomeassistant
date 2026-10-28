@@ -19,6 +19,7 @@ from .entity import (
     hub_device_info,
     module_device_info,
     module_of,
+    thermostat_sensor_endpoints,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,6 +46,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SinumConfigEntry) -> boo
     hub = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, **hub_device_info(entry))
     coordinator.hub_device_id = hub.id
     _async_migrate_to_module_devices(hass, entry, coordinator)
+    if entry.minor_version < 2:
+        _async_disable_thermostat_duplicates(hass, entry, coordinator)
+        hass.config_entries.async_update_entry(entry, minor_version=2)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -203,3 +207,27 @@ def _async_migrate_to_module_devices(
             sum(map(len, old_by_module.values())),
             len(old_by_module),
         )
+
+
+def _async_disable_thermostat_duplicates(
+    hass: HomeAssistant, entry: SinumConfigEntry, coordinator: SinumCoordinator
+) -> None:
+    """Egyszeri: a termosztát által is mutatott panelérzékelők letiltása.
+
+    Az újonnan létrejövők eleve letiltva jönnek létre; a korábbiakat egyszer tiltjuk
+    le, utána a felhasználó által újra engedélyezettek engedélyezve maradnak.
+    """
+    ent_reg = er.async_get(hass)
+    keys = {"temperature_sensor": "temperature", "humidity_sensor": "humidity"}
+    disabled = 0
+    for cls, dev_id in thermostat_sensor_endpoints(coordinator):
+        if (key := keys.get(str(coordinator.data[cls][dev_id].get("type")))) is None:
+            continue
+        unique_id = entity_unique_id(entry.entry_id, cls, dev_id, key)
+        entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+        if entity_id is None or (ent := ent_reg.async_get(entity_id)) is None or ent.disabled_by:
+            continue
+        ent_reg.async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+        disabled += 1
+    if disabled:
+        _LOGGER.info("Disabled %d SINUM panel sensors that their thermostat already shows", disabled)

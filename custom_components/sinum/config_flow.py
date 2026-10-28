@@ -35,6 +35,8 @@ class SinumThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     """SINUM vezérlő felvétele."""
 
     VERSION = 1
+    # 2: a termosztát által is mutatott panelérzékelők egyszeri letiltása megtörtént
+    MINOR_VERSION = 2
 
     async def _async_validate(self, host: str, token: str) -> dict[str, str]:
         if not host or " " in host:

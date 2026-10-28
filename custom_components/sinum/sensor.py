@@ -18,6 +18,7 @@ from .entity import (
     async_add_device_entities,
     measurement,
     module_of,
+    thermostat_sensor_endpoints,
 )
 
 # 'us' régióban a fényszenzor foot-candle-t ad; 1 fc = 10,764 lx
@@ -42,6 +43,8 @@ async def async_setup_entry(
 
     def build(devices: list[dict[str, Any]]) -> list[SensorEntity]:
         entities: list[SensorEntity] = []
+        # A termosztát ugyanezt mutatja a panel eszközén, ezért ezek alapból letiltva
+        duplicates = thermostat_sensor_endpoints(coordinator)
         for dev in devices:
             dev_type = dev.get("type")
             if dev["class"] == "virtual" and dev_type == "thermostat":
@@ -77,6 +80,7 @@ async def async_setup_entry(
                     SinumSensor(
                         coordinator, dev, "temperature", "temperature", 10, TEMPERATURE,
                         valid_range=temp_range, primary=True,
+                        enabled_default=(dev["class"], dev["id"]) not in duplicates,
                     )
                 )
             elif dev_type == "humidity_sensor":
@@ -84,6 +88,7 @@ async def async_setup_entry(
                     SinumSensor(
                         coordinator, dev, "humidity", "humidity", 10, HUMIDITY,
                         valid_range=HUMIDITY_RANGE, primary=True,
+                        enabled_default=(dev["class"], dev["id"]) not in duplicates,
                     )
                 )
             elif dev_type == "light_sensor":
